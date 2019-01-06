@@ -16,8 +16,9 @@ import re
 from collections import namedtuple
 from random import seed
 
+from measures import fair_measure
+
 sys.path.insert(0, 'fairlearn/')
-import moments as moments
 import classred as red
 
 sys.path.insert(0, 'fair_classification/')
@@ -27,7 +28,7 @@ import loss_funcs as lf
 
 sys.path.insert(0, 'fairERM/')
 from linear_ferm import Linear_FERM
-from measures import fair_measure
+
 
 
 class LeastSquaresLearner:
@@ -187,10 +188,7 @@ def run_test(test, data, sensible_name, learner, creteria, verbose, classifier='
     elif classifier == 'Shai':
         res = run_test_Shai(test, data, sensible_name, learner, creteria)
     else:
-        if creteria == 'DP':
-            res = run_test_Zafar_DP(test, data, sensible_name, learner, creteria)
-        else:
-            res = run_test_Zafar_EO(test, data, sensible_name, learner, creteria)
+        res = run_test_Zafar(test, data, sensible_name, learner, creteria)
 
     if verbose:
         print("testing (%s, eps=%.5f)" % (test["cons_class"].short_name, test["eps"]))
@@ -212,22 +210,16 @@ def run_test_Shai(test, data, sensible_name, learner, creteria):
     algorithm = Linear_FERM(dataX, dataA, dataY, clf, creteria)
     algorithm.fit()
 
-    sensible_feature_values = list(set(dataX))
 
-    def get_stats(clf, dataX, dataA, dataY):
-        disp = None
-        error = None
+    def _get_stats(clf, dataX, dataA, dataY):
         pred = algorithm.predict(dataX, dataA)
-        eq_sensible_feature = fair_measure(algorithm, dataX, dataA, dataY, creteria)
-        disp = np.abs(eq_sensible_feature[sensible_feature_values[0]] -
-                                   eq_sensible_feature[sensible_feature_values[1]])
-
+        disp = fair_measure(pred, dataX, dataA, dataY, creteria)
         error = 1 - accuracy_score(dataY, pred)
         return disp, error
 
     res = dict()
-    res["disp_train"], res["error_train"] = get_stats(algorithm, dataX_train, dataA_train, dataY_train)
-    res["disp_test"], res["error_test"] = get_stats(algorithm, dataX_test, dataA_test, dataY_test)
+    res["disp_train"], res["error_train"] = _get_stats(algorithm, dataX_train, dataA_train, dataY_train)
+    res["disp_test"], res["error_test"] = _get_stats(algorithm, dataX_test, dataA_test, dataY_test)
 
     return res
 
@@ -240,121 +232,153 @@ def run_test_Agarwal(test, data, sensible_name, learner, creteria):
                             cons=test["cons_class"](), eps=test["eps"])
 
     res = res_tuple._asdict()
-
     Q = res["best_classifier"]
-    res["n_classifiers"] = len(res["classifiers"])
 
-    disp = test["cons_class"]()
-    disp.init(dataX_train, dataA_train, dataY_train)
+    def _get_stats(clf, dataX, dataA, dataY):
+        pred = clf(dataX).values
+        for i in range(len(pred)):
+            if np.random.random() < pred[i]:
+                pred[i] = 1.0
+            else:
+                pred[i] = 0.0
+        pred = pd.Series(pred)
+        disp = fair_measure(pred, dataX, dataA, dataY, creteria)
 
-    disp_test = test["cons_class"]()
-    disp_test.init(dataX_test, dataA_test, dataY_test)
+        error = 1 - accuracy_score(dataY, pred)
+        return disp, error
 
-    error = moments.MisclassError()
-    error.init(dataX_train, dataA_train, dataY_train)
-
-    error_test = moments.MisclassError()
-    error_test.init(dataX_test, dataA_test, dataY_test)
-
-    res["disp_train"] = disp.gamma(Q).max()
-    res["disp_test"] = disp_test.gamma(Q).max()
-    res["error_train"] = error.gamma(Q)[0]
-    res["error_test"] = error_test.gamma(Q)[0]
+    res["disp_train"], res["error_train"] = _get_stats(Q, dataX_train, dataA_train, dataY_train)
+    res["disp_test"], res["error_test"] = _get_stats(Q, dataX_test, dataA_test, dataY_test)
 
     return res
 
+# The following measure
+# def run_test_Agarwal(test, data, sensible_name, learner, creteria):
+#
+#     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
+#
+#     res_tuple = red.expgrad(dataX, dataA, dataY, learner,
+#                             cons=test["cons_class"](), eps=test["eps"])
+#
+#     res = res_tuple._asdict()
+#
+#     Q = res["best_classifier"]
+#     res["n_classifiers"] = len(res["classifiers"])
+#
+#     disp = test["cons_class"]()
+#     disp.init(dataX_train, dataA_train, dataY_train)
+#
+#     disp_test = test["cons_class"]()
+#     disp_test.init(dataX_test, dataA_test, dataY_test)
+#
+#     error = moments.MisclassError()
+#     error.init(dataX_train, dataA_train, dataY_train)
+#
+#     error_test = moments.MisclassError()
+#     error_test.init(dataX_test, dataA_test, dataY_test)
+#
+#     res["disp_train"] = disp.gamma(Q).max()
+#     res["disp_test"] = disp_test.gamma(Q).max()
+#     res["error_train"] = error.gamma(Q)[0]
+#     res["error_test"] = error_test.gamma(Q)[0]
+#
+#     return res
 
-def run_test_Zafar_EO(test, data, sensible_name, learner, creteria):
 
+def run_test_Zafar(test, data, sensible_name, learner, creteria):
+    dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
     x, y, x_control, x_train, y_train, x_control_train, x_test, y_test, x_control_test = convert_data_format_Zafar(data, sensible_name)
-    sensitive_attrs = [sensible_name]
 
-    loss_function = "logreg" # perform the experiments with logistic regression
-    EPS = 1e-6
+    w = None
+    if creteria == 'EO':
 
-    cons_type = 1 # FPR constraint -- just change the cons_type, the rest of parameters should stay the same
-    tau = 5.0
-    mu = 1.2
-    sensitive_attrs_to_cov_thresh = {sensible_name: {0:{0:0, 1:test['eps']}, 1:{0:0, 1:test['eps']}, 2:{0:0, 1:test['eps']}}} # zero covariance threshold, means try to get the fairest solution
-    cons_params = {"cons_type": cons_type,
-                    "tau": tau,
-                    "mu": mu,
-                    "sensitive_attrs_to_cov_thresh": sensitive_attrs_to_cov_thresh}
+        loss_function = "logreg" # perform the experiments with logistic regression
+        EPS = 1e-6
+
+        cons_type = 1 # FPR constraint -- just change the cons_type, the rest of parameters should stay the same
+        tau = 5.0
+        mu = 1.2
+        sensitive_attrs_to_cov_thresh = {sensible_name: {0:{0:0, 1:test['eps']}, 1:{0:0, 1:test['eps']}, 2:{0:0, 1:test['eps']}}} # zero covariance threshold, means try to get the fairest solution
+        cons_params = {"cons_type": cons_type,
+                        "tau": tau,
+                        "mu": mu,
+                        "sensitive_attrs_to_cov_thresh": sensitive_attrs_to_cov_thresh}
 
 
-    def _train_test_classifier():
         w = fdm.train_model_disp_mist(x, y, x_control, loss_function, EPS, cons_params)
 
+    else:
+        apply_fairness_constraints = 1 # set this flag to one since we want to optimize accuracy subject to fairness constraints
+        apply_accuracy_constraint = 0
+        sep_constraint = 0
 
+        loss_function = lf._logistic_loss
+        sensitive_attrs = [sensible_name]
+        # print('eps:',test['eps'])
+        sensitive_attrs_to_cov_thresh = {sensible_name:test['eps']}
 
-        train_score, test_score, cov_all_train, cov_all_test, s_attr_to_fp_fn_train, s_attr_to_fp_fn_test = fdm.get_clf_stats(w, x_train, y_train, x_control_train, x_test, y_test, x_control_test, sensitive_attrs)
-        disp_test = np.abs(s_attr_to_fp_fn_test[sensible_name][0]["fpr"] - s_attr_to_fp_fn_test[sensible_name][0]["fpr"])
-        disp_train = np.abs(s_attr_to_fp_fn_train[sensible_name][0]["fpr"] - s_attr_to_fp_fn_train[sensible_name][0]["fpr"])
+        gamma = None
 
-
-        # accuracy and FPR are for the test because we need of for plotting
-        return disp_test, disp_train, test_score, train_score
-
-
-    disp_test, disp_train, test_score, train_score  = _train_test_classifier()
-    res = dict()
-    res["disp_train"] = disp_train
-    res["disp_test"] = disp_test
-    res["error_train"] = 1-train_score
-    res["error_test"] = 1-test_score
-
-    return res
-
-
-def run_test_Zafar_DP(test, data, sensible_name, learner, creteria):
-
-    x, y, x_control, x_train, y_train, x_control_train, x_test, y_test, x_control_test = convert_data_format_Zafar(data, sensible_name)
-
-    apply_fairness_constraints = 1 # set this flag to one since we want to optimize accuracy subject to fairness constraints
-    apply_accuracy_constraint = 0
-    sep_constraint = 0
-
-    loss_function = lf._logistic_loss
-    sensitive_attrs = [sensible_name]
-    # print('eps:',test['eps'])
-    sensitive_attrs_to_cov_thresh = {sensible_name:test['eps']}
-
-    gamma = None
-
-    def _compute_fair_violation(w, sensitive_attrs, x, x_control, test_score, verbose):
-        distances_boundary = np.dot(x, w)
-        all_class_labels_assigned = np.sign(distances_boundary)
-        correlation_dict = ut.get_correlations(None, None, all_class_labels_assigned, x_control, sensitive_attrs)
-        cov_dict = ut.print_covariance_sensitive_attrs(None, x, distances_boundary, x_control, sensitive_attrs)
-        disp = ut.print_classifier_fairness_stats([test_score], [correlation_dict], [cov_dict], sensitive_attrs[0], verbose)
-        return disp
-
-    def _train_test_classifier():
         w = ut.train_model(x, y, x_control, loss_function, apply_fairness_constraints, apply_accuracy_constraint, sep_constraint, sensitive_attrs, sensitive_attrs_to_cov_thresh, gamma)
 
-        train_score, test_score, correct_answers_train, correct_answers_test = ut.check_accuracy(w, x_train, y_train, x_test, y_test, None, None)
+    y_pred_train = np.sign(np.dot(x_train, w))
+    disp_train = fair_measure(y_pred_train, dataX_train, dataA_train, dataY_train, creteria)
+    train_score = accuracy_score(y_train, y_pred_train)
 
-        disp_test = _compute_fair_violation(w, sensitive_attrs, x_test, x_control_test, test_score, False)
-
-        disp_train = _compute_fair_violation(w, sensitive_attrs, x_train, x_control_train, train_score, False)
-
-
-        return disp_test, disp_train, test_score, train_score
-
-
-    """ Now classify such that we optimize for accuracy while achieving perfect fairness """
-
-    # print("== Classifier with fairness constraint ==")
-    disp_test, disp_train, test_score, train_score  = _train_test_classifier()
+    y_pred_test = np.sign(np.dot(x_test, w))
+    disp_test = fair_measure(y_pred_test, dataX_test, dataA_test, dataY_test, creteria)
+    test_score = accuracy_score(y_test, y_pred_test)
 
     res = dict()
     res["disp_train"] = disp_train
     res["disp_test"] = disp_test
-    res["error_train"] = 1-train_score
-    res["error_test"] = 1-test_score
-
+    res["error_train"] = 1 - train_score
+    res["error_test"] = 1 - test_score
 
     return res
+
+
+# def run_test_Zafar(test, data, sensible_name, learner, creteria):
+#
+#     x, y, x_control, x_train, y_train, x_control_train, x_test, y_test, x_control_test = convert_data_format_Zafar(data, sensible_name)
+#     sensitive_attrs = [sensible_name]
+#
+#     loss_function = "logreg" # perform the experiments with logistic regression
+#     EPS = 1e-6
+#
+#     cons_type = 1 # FPR constraint -- just change the cons_type, the rest of parameters should stay the same
+#     tau = 5.0
+#     mu = 1.2
+#     sensitive_attrs_to_cov_thresh = {sensible_name: {0:{0:0, 1:test['eps']}, 1:{0:0, 1:test['eps']}, 2:{0:0, 1:test['eps']}}} # zero covariance threshold, means try to get the fairest solution
+#     cons_params = {"cons_type": cons_type,
+#                     "tau": tau,
+#                     "mu": mu,
+#                     "sensitive_attrs_to_cov_thresh": sensitive_attrs_to_cov_thresh}
+#
+#
+#     def _train_test_classifier():
+#         w = fdm.train_model_disp_mist(x, y, x_control, loss_function, EPS, cons_params)
+#
+#
+#
+#         train_score, test_score, cov_all_train, cov_all_test, s_attr_to_fp_fn_train, s_attr_to_fp_fn_test = fdm.get_clf_stats(w, x_train, y_train, x_control_train, x_test, y_test, x_control_test, sensitive_attrs)
+#         disp_test = np.abs(s_attr_to_fp_fn_test[sensible_name][0]["fpr"] - s_attr_to_fp_fn_test[sensible_name][0]["fpr"])
+#         disp_train = np.abs(s_attr_to_fp_fn_train[sensible_name][0]["fpr"] - s_attr_to_fp_fn_train[sensible_name][0]["fpr"])
+#
+#
+#         # accuracy and FPR are for the test because we need of for plotting
+#         return disp_test, disp_train, test_score, train_score
+#
+#
+#     disp_test, disp_train, test_score, train_score  = _train_test_classifier()
+#     res = dict()
+#     res["disp_train"] = disp_train
+#     res["disp_test"] = disp_test
+#     res["error_train"] = 1-train_score
+#     res["error_test"] = 1-test_score
+#
+#     return res
+
 
 
 def convert_data_format_Zafar(data, sensible_name):
@@ -448,3 +472,11 @@ def _plot(eps_list, data, k, xl, yl, filename):
     plt.xlabel(xl)
     plt.ylabel(yl)
     plt.show()
+
+
+def estimate(dataX, dataA, dataY):
+    eta_max = 0
+    eta_min = 0
+    pi_cor = np.mean([1.0 if a > 0 else 0.0 for a in dataA])
+    alpha = eta_min * (eta_max - pi_cor) / pi_cor * (eta_max - eta_min)
+    beta = (1 - eta_max) * (pi_cor - eta_min) / (1 - pi_cor) * (eta_max - eta_min)

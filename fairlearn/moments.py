@@ -63,6 +63,7 @@ class _CondOpportunity(Moment):
         expect_grp = self.tags.groupby("grp").mean()
         expect_attr_grp = self.tags.groupby(["grp", "attr"]).mean()
         expect_attr_grp["diff"] = expect_attr_grp["pred"] - expect_grp["pred"]
+        # print(expect_attr_grp["pred"], expect_grp["pred"])
         g_unsigned = expect_attr_grp["diff"]
         g_signed = pd.concat([g_unsigned, -g_unsigned],
                              keys=["+", "-"],

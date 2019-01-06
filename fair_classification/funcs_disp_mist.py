@@ -117,7 +117,6 @@ def train_model_disp_mist(x, y, x_control, loss_function, EPS, cons_params=None)
 
     except:
         traceback.print_exc()
-        print(prob.status)
         # traceback.print_tb(None)
 
 
