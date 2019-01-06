@@ -3,23 +3,32 @@ This file contains multiple functions that convert data to appropriate format, i
 '''
 import numpy as np
 import pandas as pd
-import fairlearn.moments as moments
-import fairlearn.classred as red
-from collections import namedtuple
 import matplotlib.pyplot as plt
+from sklearn import svm
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import GridSearchCV
 
 import time
 import pickle
 import copy
 import sys
 import re
-
+from collections import namedtuple
 from random import seed
 
-sys.path.insert(0, 'fair_classification/') # the code for fair classification is in this directory
+sys.path.insert(0, 'fairlearn/')
+import moments as moments
+import classred as red
+
+sys.path.insert(0, 'fair_classification/')
 import utils as ut
 import funcs_disp_mist as fdm
 import loss_funcs as lf
+
+sys.path.insert(0, 'fairERM/')
+from linear_ferm import Linear_FERM
+from measures import fair_measure
+
 
 class LeastSquaresLearner:
     def __init__(self):
@@ -132,7 +141,7 @@ def corrupt(dataA, rho):
 
 
 
-def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, classifier, include_sensible, verbose):
+def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, creteria, classifier, include_sensible, verbose):
     all_stats_cor = {k:[[] for _ in range(trials)] for k in keys}
     all_stats_nocor = {k:[[] for _ in range(trials)] for k in keys}
     all_stats_cor_scale = {k:[[] for _ in range(trials)] for k in keys}
@@ -150,15 +159,15 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cl
 
         data_cor = copy.deepcopy(data_nocor)
         data_cor[2] = cor_dataA
-        global flag
+
 
         for test in tests:
-            res_cor = run_test(test, data_cor, sensible_name, learner, True, verbose, classifier)
-            flag = 1
-            res_nocor = run_test(test, data_nocor, sensible_name, learner,  False, verbose, classifier)
-            flag = 2
+            res_cor = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
+
+            res_nocor = run_test(test, data_nocor, sensible_name, learner,  creteria, verbose, classifier)
+
             test['eps'] *= (1-alpha_a-beta_a)
-            res_cor_scale = run_test(test, data_cor, sensible_name, learner, True, verbose, classifier)
+            res_cor_scale = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
             for k in keys:
                 all_stats_cor[k][i].append(res_cor[k])
@@ -171,18 +180,20 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cl
     return all_data
 
 
-def run_test(test, data, sensible_name, learner, corruption, verbose, classifier='Zafar'):
+def run_test(test, data, sensible_name, learner, creteria, verbose, classifier='Zafar'):
     res = None
-    if classifier == 'Zafar':
-        if test['cons_class'] == moments.DP:
-            res = run_test_Zafar_DP(test, data, sensible_name, learner, corruption)
-        else:
-            res = run_test_Zafar_EO(test, data, sensible_name, learner, corruption)
+    if classifier == 'Agarwal':
+        res = run_test_Agarwal(test, data, sensible_name, learner, creteria)
+    elif classifier == 'Shai':
+        res = run_test_Shai(test, data, sensible_name, learner, creteria)
     else:
-        res = run_test_Agarwal(test, data, sensible_name, learner, corruption)
+        if creteria == 'DP':
+            res = run_test_Zafar_DP(test, data, sensible_name, learner, creteria)
+        else:
+            res = run_test_Zafar_EO(test, data, sensible_name, learner, creteria)
 
     if verbose:
-        print("testing (%s, eps=%.5f, corruption=%r)" % (test["cons_class"].short_name, test["eps"], corruption))
+        print("testing (%s, eps=%.5f)" % (test["cons_class"].short_name, test["eps"]))
 
         for k in keys:
             print(k+':', res[k], end=' ')
@@ -191,7 +202,37 @@ def run_test(test, data, sensible_name, learner, corruption, verbose, classifier
     return res
 
 
-def run_test_Agarwal(test, data, sensible_name, learner, corruption):
+def run_test_Shai(test, data, sensible_name, learner, creteria):
+    # Standard SVM -  Train an SVM using the training set
+    dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
+
+    param_grid = [{'C': [0.01, 0.1, 1.0], 'kernel': ['linear']}]
+    svc = svm.SVC()
+    clf = GridSearchCV(svc, param_grid, n_jobs=1)
+    algorithm = Linear_FERM(dataX, dataA, dataY, clf, creteria)
+    algorithm.fit()
+
+    sensible_feature_values = list(set(dataX))
+
+    def get_stats(clf, dataX, dataA, dataY):
+        disp = None
+        error = None
+        pred = algorithm.predict(dataX, dataA)
+        eq_sensible_feature = fair_measure(algorithm, dataX, dataA, dataY, creteria)
+        disp = np.abs(eq_sensible_feature[sensible_feature_values[0]] -
+                                   eq_sensible_feature[sensible_feature_values[1]])
+
+        error = 1 - accuracy_score(dataY, pred)
+        return disp, error
+
+    res = dict()
+    res["disp_train"], res["error_train"] = get_stats(algorithm, dataX_train, dataA_train, dataY_train)
+    res["disp_test"], res["error_test"] = get_stats(algorithm, dataX_test, dataA_test, dataY_test)
+
+    return res
+
+
+def run_test_Agarwal(test, data, sensible_name, learner, creteria):
 
     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
 
@@ -223,7 +264,7 @@ def run_test_Agarwal(test, data, sensible_name, learner, corruption):
     return res
 
 
-def run_test_Zafar_EO(test, data, sensible_name, learner, corruption):
+def run_test_Zafar_EO(test, data, sensible_name, learner, creteria):
 
     x, y, x_control, x_train, y_train, x_control_train, x_test, y_test, x_control_test = convert_data_format_Zafar(data, sensible_name)
     sensitive_attrs = [sensible_name]
@@ -265,7 +306,7 @@ def run_test_Zafar_EO(test, data, sensible_name, learner, corruption):
     return res
 
 
-def run_test_Zafar_DP(test, data, sensible_name, learner, corruption):
+def run_test_Zafar_DP(test, data, sensible_name, learner, creteria):
 
     x, y, x_control, x_train, y_train, x_control_train, x_test, y_test, x_control_test = convert_data_format_Zafar(data, sensible_name)
 

@@ -11,6 +11,7 @@ This repo implements a general interface for noisy fair binary classification. I
 
 * Zafar
 * Agarwal
+* Shai (will ignore the epsilon value passed because epsilon=0 is inherent in the implementation)
 
 ### datasets:
 
