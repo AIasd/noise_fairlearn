@@ -148,7 +148,7 @@ class _Lagrangian:
         dual_bounds = [
             (None, None) if i == n_cons else (0, None) for i in range(n_cons+1)]
         res_dual = opt.linprog(dual_c, A_ub=dual_A_ub, b_ub=dual_b_ub,
-                               bounds=dual_bounds)
+                               bounds=dual_bounds, method='interior-point')
         lambda_vec = pd.Series(res_dual.x[:-1], self.cons.index)
         self.last_linprog_n_hs = n_hs
         self.last_linprog_res = (h, lambda_vec,
