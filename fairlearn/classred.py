@@ -133,7 +133,7 @@ class _Lagrangian:
         A_eq = np.concatenate(
             (np.ones((1, n_hs)), np.zeros((1, 1))), axis=1)
         b_eq = np.ones(1)
-        res = opt.linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq)
+        res = opt.linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, method='interior-point')
         try:
             h = pd.Series(res.x[:-1], self.hs.index)
         except TypeError:

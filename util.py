@@ -8,6 +8,17 @@ from sklearn import svm
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import GridSearchCV
 
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+
+
+from cleanlab.classification import LearningWithNoisyLabels
+
 import time
 import pickle
 import copy
@@ -16,10 +27,12 @@ import re
 from collections import namedtuple
 from random import seed
 
+from load_data import load_adult, load_compas
 from measures import fair_measure
 
 sys.path.insert(0, 'fairlearn/')
 import classred as red
+import moments
 
 sys.path.insert(0, 'fair_classification/')
 import utils as ut
@@ -108,13 +121,40 @@ def permute_and_split(datamat, permute=True, train_ratio=0.8):
 
     return dataset_train, dataset_test
 
+def get_eta(data_nocor):
+    '''
+    Calculate Pr[Y=1|A=0] and Pr[Y=1|A=1] in training set.
+    '''
+    dataY = data_nocor[1]
+    dataA = data_nocor[2]
+    c_a_0 = 0
+    c_a_1 = 0
+    c_10 = 0
+    c_11 = 0
+    for y, a in zip(dataY, dataA):
+        if a == 0:
+            c_a_0 += 1
+            if y == 1:
+                c_10 += 1
+        else:
+            c_a_1 += 1
+            if y == 1:
+                c_11 += 1
+    p_10 = c_10 / c_a_0
+    p_11 = c_11 / c_a_1
+    # print('p_10:', p_10, 'p_11:', p_11)
+    return p_10, p_11
 
-def corrupt(dataA, rho):
+def corrupt(dataA, dataY, rho, creteria):
     '''
     Flip values in dataA with probability rho[0] and rho[1] for positive/negative values respectively.
     '''
-
     pi_a = np.mean([1.0 if a > 0 else 0.0 for a in dataA])
+    # pi_a = None
+    # if creteria == 'DP':
+    #     pi_a = np.mean([1.0 if a > 0 else 0.0 for a in dataA])
+    # elif creteria == 'EO':
+    #     pi_a = np.sum([1.0 if (a > 0 and y==1) else 0.0 for a, y in zip(dataA, dataY)]) / np.sum([1.0 if y==1 else 0.0 for y in dataY])
     rho_a_plus = rho[0]
     rho_a_minus = rho[1]
 
@@ -134,32 +174,129 @@ def corrupt(dataA, rho):
             if rand < rho_a_minus:
                 c -= 1
                 dataA[i] = 1
+    # print('alpha_a', alpha_a, 'beta_a', beta_a)
     # print(c, len(dataA))
     # print(np.sum(dataA==0), np.sum(dataA==1))
     return alpha_a, beta_a
 
+def scale_eps(eps, alpha_a, beta_a, p_10, p_11, creteria):
+    new_eps = None
+    if creteria == 'DP':
+        new_eps = eps * (1-alpha_a-beta_a)
+    elif creteria == 'EO':
+        alpha_a_p = alpha_a*p_10 / ((1-alpha_a)*p_11 + alpha_a*p_10)
+        beta_a_p = beta_a*p_11 / ((1-beta_a)*p_10 + beta_a*p_11)
+        # print('alpha_a_p:', alpha_a_p, 'beta_a_p:',  beta_a_p)
+        new_eps =  eps * (1-alpha_a_p-beta_a_p)
+    return new_eps
+
+def denoiseA(data_cor):
+    dataX = data_cor[0]
+    cor_dataA = data_cor[2]
+    dataA = data_cor[5]
+
+    # classifiers = [
+    #     GaussianNB(),
+    #     LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'),
+    #     KNeighborsClassifier(n_neighbors=3),
+    #     SVC(kernel="linear", C=0.025, probability=True, random_state=0),
+    #     SVC(gamma=2, C=1, probability=True, random_state=0),
+    #     RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
+    #     MLPClassifier(alpha=1, random_state=0, ),
+    #     AdaBoostClassifier(random_state=0),
+    #     QuadraticDiscriminantAnalysis()
+    # ]
+    lnl = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
+    lnl.fit(X = dataX.values, s = cor_dataA.values)
+
+    denoised_dataA = pd.Series(lnl.predict(dataX.values))
+
+    # Check recovery accuracy
+    auc1 = np.mean(dataA.values==cor_dataA.values)
+    auc2 = np.mean(dataA.values==denoised_dataA.values)
+    print('auc:', auc1, auc2)
+
+    data_denoised = copy.deepcopy(data_cor)
+    data_denoised[2] = denoised_dataA
+
+    # c_1 = 0
+    # c_0 = 0
+    # tot_1 = 0
+    # tot_0 = 0
+    # for i, j in zip(cor_dataA, denoised_dataA):
+    #     if i == 1:
+    #         tot_1 += 1
+    #     else:
+    #         tot_0 += 1
+    #     if i != j:
+    #         if i==1:
+    #             c_1 += 1
+    #         else:
+    #             c_0 += 1
+
+    # print(c_1, tot_1, ';', c_0, tot_0)
+
+    return data_denoised
 
 
+def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, verbose=False):
+    '''
+    dataset: one of ['compas', 'adult']
+    rho: [a, b] where a, b in interval [0,0.5]
+    frac: real number in interval [0,1]. The fraction of the data points in chosen dataset to use.
+    eps_list: a list of non-negative real numbers
+    criteria: one of ['DP','EO']
+    classifier: one of ['Agarwal', 'Zafar', 'Shai']. Zafar is the fastest.
+                Shai will ignore eps_list since eps=0 is inherent in this implementation.
+    trials: the number of trials to run
+    include_sensible: boolean. If to include sensitive attribute as a feature for optimizing the oroginal loss. Note that even
+                      if this is set to False, sensitive attribute will still be used for constraint(s).
+    filename: the file name to store the log of experiment(s).
+    verbose: boolean. If print out info at each run.
+    '''
+    sensible_name = None
+    sensible_feature = None
 
+    if dataset == 'adult':
+        datamat = load_adult(frac)
+        sensible_name = 'gender'
+        sensible_feature = 9
+    else:
+        datamat = load_compas(frac)
+        sensible_name = 'race'
+        sensible_feature = 4
+
+    if criteria == 'EO':
+        tests = [{"cons_class": moments.EO, "eps": eps} for eps in eps_list]
+    else:
+        tests = [{"cons_class": moments.DP, "eps": eps} for eps in eps_list]
+
+    all_data = _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, criteria, classifier, include_sensible, verbose)
+    save_all_data(filename, all_data, eps_list)
+
+    return all_data
 
 def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, creteria, classifier, include_sensible, verbose):
-    all_stats_cor = {k:[[] for _ in range(trials)] for k in keys}
-    all_stats_nocor = {k:[[] for _ in range(trials)] for k in keys}
-    all_stats_cor_scale = {k:[[] for _ in range(trials)] for k in keys}
-
+    n = 4
+    all_data = [{k:[[] for _ in range(trials)] for k in keys} for _ in range(n)]
 
     start = time.time()
 
     for i in range(trials):
         print('trial:', i, 'time:', time.time()-start)
         dataset_train, dataset_test = permute_and_split(datamat)
-
         data_nocor = change_format(dataset_train, dataset_test, sensible_feature, include_sensible)
+
+        p_10, p_11 = get_eta(data_nocor)
+
         cor_dataA = copy.deepcopy(data_nocor[2])
-        alpha_a, beta_a = corrupt(cor_dataA, rho=rho)
+
+        alpha_a, beta_a = corrupt(cor_dataA, data_nocor[1], rho, creteria)
 
         data_cor = copy.deepcopy(data_nocor)
         data_cor[2] = cor_dataA
+
+        data_denoised = denoiseA(data_cor)
 
 
         for test in tests:
@@ -167,16 +304,18 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
 
             res_nocor = run_test(test, data_nocor, sensible_name, learner,  creteria, verbose, classifier)
 
-            test['eps'] *= (1-alpha_a-beta_a)
+            res_denoised = run_test(test, data_denoised, sensible_name, learner,  creteria, verbose, classifier)
+
+            test['eps'] = scale_eps(test['eps'], alpha_a, beta_a, p_10, p_11, creteria)
+
             res_cor_scale = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
+            results = [res_cor, res_nocor, res_denoised, res_cor_scale]
+            # results = [res_cor, res_nocor, res_cor_scale]
+
             for k in keys:
-                all_stats_cor[k][i].append(res_cor[k])
-                all_stats_nocor[k][i].append(res_nocor[k])
-                all_stats_cor_scale[k][i].append(res_cor_scale[k])
-
-    all_data = [all_stats_cor, all_stats_nocor, all_stats_cor_scale]
-
+                for j in range(n):
+                    all_data[j][k][i].append(results[j][k])
 
     return all_data
 
@@ -410,28 +549,23 @@ def convert_data_format_Zafar(data, sensible_name):
 
 
 def summarize_stats(all_data, r=None):
-    all_stats_cor, all_stats_nocor, all_stats_cor_scale = all_data
+    n = len(all_data)
+    curves_mean = [{k:None for k in keys} for _ in range(n)]
+    curves_std = [{k:None for k in keys} for _ in range(n)]
 
     if not r:
-        r = [0, len(all_stats_cor)]
-
-    std_cor = {k:None for k in keys}
-    std_nocor = {k:None for k in keys}
-    std_cor_scale = {k:None for k in keys}
-    stats_cor = {k:None for k in keys}
-    stats_nocor = {k:None for k in keys}
-    stats_cor_scale = {k:None for k in keys}
+        r = [0, len(all_data[0])]
 
     for k in keys:
-        std_cor[k] = [np.std(l) for l in zip(*all_stats_cor[k][r[0]:r[1]])]
-        std_nocor[k] = [np.std(l) for l in zip(*all_stats_nocor[k][r[0]:r[1]])]
-        std_cor_scale[k] = [np.std(l) for l in zip(*all_stats_cor_scale[k][r[0]:r[1]])]
+        for i in range(n):
+            c_s = curves_std[i]
+            c_m = curves_mean[i]
+            a_d = all_data[i]
+            c_s[k] = [np.std(l) for l in zip(*a_d[k][r[0]:r[1]])]
+            c_m[k] = [np.mean(l) for l in zip(*a_d[k][r[0]:r[1]])]
 
-        stats_cor[k] = [np.mean(l) for l in zip(*all_stats_cor[k][r[0]:r[1]])]
-        stats_nocor[k] = [np.mean(l) for l in zip(*all_stats_nocor[k][r[0]:r[1]])]
-        stats_cor_scale[k] = [np.mean(l) for l in zip(*all_stats_cor_scale[k][r[0]:r[1]])]
 
-    return stats_cor, stats_nocor, stats_cor_scale, std_cor, std_nocor, std_cor_scale
+    return curves_mean, curves_std
 
 
 def save_all_data(filename, all_data, eps_list):
@@ -449,16 +583,38 @@ def restore_all_data(filename):
 
     return all_data, eps_list
 
-def _plot(eps_list, data, k, xl, yl, filename):
+
+def plot(filename):
+    all_data, eps_list = restore_all_data(filename)
+    data = summarize_stats(all_data)
+
+    keys = ["disp_train", "disp_test", "error_train", "error_test"]
+    xlabels = ['epsilon' for _ in range(4)]
+    ylabels = ['violation', 'violation', 'error', 'error']
+    ref_line = [True, True, False, False]
+    for k, xl, yl, ref in zip(keys, xlabels, ylabels, ref_line):
+        _plot(eps_list, data, k, xl, yl, filename, ref)
+
+
+def _plot(eps_list, data, k, xl, yl, filename, ref):
     '''
     Plot four graphs. Internal routine for plot
     '''
-    stats_cor, stats_nocor, stats_cor_scale, std_cor, std_nocor, std_cor_scale = data
-    labels = ['cor', 'nocor', 'cor_scale']
-    stats = [stats_cor, stats_nocor, stats_cor_scale]
-    err_bars = [std_cor, std_nocor, std_cor_scale]
-    for stat, err, label in zip(stats, err_bars, labels):
-        plt.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
+    curves_mean, curves_std = data
+    labels = ['cor', 'nocor', 'denoise', 'cor_scale']
+
+    fig, ax = plt.subplots()
+
+    # labels = ['cor', 'nocor', 'cor_scale']
+    for stat, err, label in zip(curves_mean, curves_std, labels):
+        ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
+
+    if ref:
+        lims = [
+            np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
+            np.max([ax.get_xlim(), ax.get_ylim()])   # max of both axes
+        ]
+        ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
 
     title_content = filename
     try:
@@ -467,16 +623,23 @@ def _plot(eps_list, data, k, xl, yl, filename):
     except TypeError:
         pass
 
-    plt.legend(loc='upper left')
-    plt.title('epsilon VS '+k+title_content)
-    plt.xlabel(xl)
-    plt.ylabel(yl)
+    ax.legend(loc='upper left')
+    ax.set_title('epsilon VS '+k+title_content)
+    ax.set_xlabel(xl)
+    ax.set_ylabel(yl)
     plt.show()
 
 
-def estimate(dataX, dataA, dataY):
-    eta_max = 0
-    eta_min = 0
-    pi_cor = np.mean([1.0 if a > 0 else 0.0 for a in dataA])
-    alpha = eta_min * (eta_max - pi_cor) / pi_cor * (eta_max - eta_min)
-    beta = (1 - eta_max) * (pi_cor - eta_min) / (1 - pi_cor) * (eta_max - eta_min)
+
+
+
+
+
+
+
+# def estimate(dataX, dataA, dataY):
+#     eta_max = 0
+#     eta_min = 0
+#     pi_cor = np.mean([1.0 if a > 0 else 0.0 for a in dataA])
+#     alpha = eta_min * (eta_max - pi_cor) / pi_cor * (eta_max - eta_min)
+#     beta = (1 - eta_max) * (pi_cor - eta_min) / (1 - pi_cor) * (eta_max - eta_min)

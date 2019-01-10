@@ -52,7 +52,7 @@ def train_model(x, y, x_control, loss_function, apply_fairness_constraints, appl
 
     assert((apply_accuracy_constraint == 1 and apply_fairness_constraints == 1) == False) # both constraints cannot be applied at the same time
 
-    max_iter = 100000 # maximum number of iterations for the minimization algorithm
+    max_iter = 200000 # maximum number of iterations for the minimization algorithm
 
     if apply_fairness_constraints == 0:
         constraints = []
