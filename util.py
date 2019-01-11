@@ -16,7 +16,6 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
-
 from cleanlab.classification import LearningWithNoisyLabels
 
 import time
@@ -149,19 +148,14 @@ def corrupt(dataA, dataY, rho, creteria):
     '''
     Flip values in dataA with probability rho[0] and rho[1] for positive/negative values respectively.
     '''
-    pi_a = np.mean([1.0 if a > 0 else 0.0 for a in dataA])
+
     # pi_a = None
     # if creteria == 'DP':
     #     pi_a = np.mean([1.0 if a > 0 else 0.0 for a in dataA])
     # elif creteria == 'EO':
     #     pi_a = np.sum([1.0 if (a > 0 and y==1) else 0.0 for a, y in zip(dataA, dataY)]) / np.sum([1.0 if y==1 else 0.0 for y in dataY])
-    rho_a_plus = rho[0]
-    rho_a_minus = rho[1]
+    rho_a_plus, rho_a_minus = rho
 
-    pi_a_corr = (1-rho_a_plus)*pi_a + rho_a_minus*(1-pi_a)
-
-    alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
-    beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
     c = 0
     # print(np.sum(dataA==0), np.sum(dataA==1))
     for i in range(len(dataA)):
@@ -174,9 +168,18 @@ def corrupt(dataA, dataY, rho, creteria):
             if rand < rho_a_minus:
                 c -= 1
                 dataA[i] = 1
-    # print('alpha_a', alpha_a, 'beta_a', beta_a)
+
     # print(c, len(dataA))
     # print(np.sum(dataA==0), np.sum(dataA==1))
+
+def estimate_alpha_beta(cor_dataA, rho):
+    rho_a_plus, rho_a_minus = rho
+    pi_a_corr = np.mean([1.0 if a > 0 else 0.0 for a in cor_dataA])
+
+    pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
+    alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
+    beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
+
     return alpha_a, beta_a
 
 def scale_eps(eps, alpha_a, beta_a, p_10, p_11, creteria):
@@ -206,8 +209,16 @@ def denoiseA(data_cor):
     #     AdaBoostClassifier(random_state=0),
     #     QuadraticDiscriminantAnalysis()
     # ]
+
+
     lnl = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
     lnl.fit(X = dataX.values, s = cor_dataA.values)
+
+    rho_a_plus = np.min([lnl.noise_matrix[0][1], 0.5])
+    rho_a_minus = np.min([lnl.noise_matrix[1][0]])
+    rho_est = [rho_a_plus, rho_a_minus]
+
+    print(lnl.noise_matrix, rho_a_plus, rho_a_minus)
 
     denoised_dataA = pd.Series(lnl.predict(dataX.values))
 
@@ -236,7 +247,7 @@ def denoiseA(data_cor):
 
     # print(c_1, tot_1, ';', c_0, tot_0)
 
-    return data_denoised
+    return data_denoised, rho_est
 
 
 def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, verbose=False):
@@ -277,7 +288,7 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     return all_data
 
 def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, creteria, classifier, include_sensible, verbose):
-    n = 4
+    n = 5
     all_data = [{k:[[] for _ in range(trials)] for k in keys} for _ in range(n)]
 
     start = time.time()
@@ -290,27 +301,34 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         p_10, p_11 = get_eta(data_nocor)
 
         cor_dataA = copy.deepcopy(data_nocor[2])
-
-        alpha_a, beta_a = corrupt(cor_dataA, data_nocor[1], rho, creteria)
+        corrupt(cor_dataA, data_nocor[1], rho, creteria)
 
         data_cor = copy.deepcopy(data_nocor)
         data_cor[2] = cor_dataA
 
-        data_denoised = denoiseA(data_cor)
+        data_denoised, rho_est = denoiseA(data_cor)
+
+        alpha_a, beta_a = estimate_alpha_beta(cor_dataA, rho)
+        alpha_a_est, beta_a_est = estimate_alpha_beta(cor_dataA, rho_est)
 
 
         for test in tests:
+            eps_0 = test['eps']
+
             res_cor = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
             res_nocor = run_test(test, data_nocor, sensible_name, learner,  creteria, verbose, classifier)
 
             res_denoised = run_test(test, data_denoised, sensible_name, learner,  creteria, verbose, classifier)
 
-            test['eps'] = scale_eps(test['eps'], alpha_a, beta_a, p_10, p_11, creteria)
-
+            test['eps'] = scale_eps(eps_0, alpha_a, beta_a, p_10, p_11, creteria)
             res_cor_scale = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
-            results = [res_cor, res_nocor, res_denoised, res_cor_scale]
+            test['eps'] = scale_eps(eps_0, alpha_a_est, beta_a_est, p_10, p_11, creteria)
+            res_cor_scale_est = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
+
+
+            results = [res_cor, res_nocor, res_denoised, res_cor_scale, res_cor_scale_est]
             # results = [res_cor, res_nocor, res_cor_scale]
 
             for k in keys:
@@ -601,7 +619,7 @@ def _plot(eps_list, data, k, xl, yl, filename, ref):
     Plot four graphs. Internal routine for plot
     '''
     curves_mean, curves_std = data
-    labels = ['cor', 'nocor', 'denoise', 'cor_scale']
+    labels = ['cor', 'nocor', 'denoise', 'cor_scale', 'cor_scale_est']
 
     fig, ax = plt.subplots()
 
@@ -623,7 +641,7 @@ def _plot(eps_list, data, k, xl, yl, filename, ref):
     except TypeError:
         pass
 
-    ax.legend(loc='upper left')
+    ax.legend(loc='upper left', framealpha=0.1)
     ax.set_title('epsilon VS '+k+title_content)
     ax.set_xlabel(xl)
     ax.set_ylabel(yl)

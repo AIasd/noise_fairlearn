@@ -20,7 +20,7 @@ parser.add_argument('--dataset', type=str, default='compas', help='dataset to ru
 parser.add_argument('--rho-plus', dest='rho_plus', type=float, default=0.2, help='rho+ (default: 0.2)')
 parser.add_argument('--rho-minus', dest='rho_minus', type=float, default=0.2, help='rho- (default: 0.2)')
 parser.add_argument('--frac', dest='frac', type=float, default=1, help='rho- (default: 1)')
-parser.add_argument('--criteria', type=str, default='DP', help='fairness criteria')
+parser.add_argument('--criteria', dest='criteria', type=str, default='DP', help='fairness criteria')
 parser.add_argument('--classifier', type=str, default='Agarwal', help='fairness classifier')
 parser.add_argument('--trials', type=int, default=3, help='number of trials')
 
@@ -39,10 +39,10 @@ if dataset == 'adult':
     eps_list = [0.002 * i for i in range(1, 10)]
 elif dataset == 'compas':
     eps_list = [0.02 * i for i in range(1, 10)]
-criteria = parser.criteria
-classifier = parser.classifier
-trials = parser.trials
-include_sensible = parser.include_sensible
+criteria = args.criteria
+classifier = args.classifier
+trials = args.trials
+include_sensible = args.include_sensible
 filename = log_dir+'all_data('+dataset+','+str(rho[0])+','+str(rho[1])+','+str(frac)+','+criteria \
            +','+classifier+','+str(trials)+','+str(include_sensible)+').pickle'
 verbose = args.verbose
