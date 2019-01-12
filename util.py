@@ -252,7 +252,7 @@ def denoiseA(data_cor):
 
 def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, verbose=False):
     '''
-    dataset: one of ['compas', 'adult']
+    dataset: one of ['compas', 'adult', 'adultr']
     rho: [a, b] where a, b in interval [0,0.5]
     frac: real number in interval [0,1]. The fraction of the data points in chosen dataset to use.
     eps_list: a list of non-negative real numbers
@@ -268,6 +268,10 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     sensible_name = None
     sensible_feature = None
 
+    if dataset == 'adultr':
+        datamat = load_adult(frac)
+        sensible_name = 'race'
+        sensible_feature = 8
     if dataset == 'adult':
         datamat = load_adult(frac)
         sensible_name = 'gender'
@@ -636,28 +640,13 @@ def _plot(eps_list, data, k, xl, yl, filename, ref):
 
     title_content = filename
     try:
-        p = re.compile('\(.*\)')
-        title_content = p.search(filename)[0]
+        p = re.compile('all\_data\_(.*)\.pickle')
+        title_content = p.search(filename).group(1)
     except TypeError:
         pass
 
     ax.legend(loc='upper left', framealpha=0.1)
-    ax.set_title('epsilon VS '+k+title_content)
+    ax.set_title('epsilon VS '+k+':'+title_content)
     ax.set_xlabel(xl)
     ax.set_ylabel(yl)
     plt.show()
-
-
-
-
-
-
-
-
-
-# def estimate(dataX, dataA, dataY):
-#     eta_max = 0
-#     eta_min = 0
-#     pi_cor = np.mean([1.0 if a > 0 else 0.0 for a in dataA])
-#     alpha = eta_min * (eta_max - pi_cor) / pi_cor * (eta_max - eta_min)
-#     beta = (1 - eta_max) * (pi_cor - eta_min) / (1 - pi_cor) * (eta_max - eta_min)
