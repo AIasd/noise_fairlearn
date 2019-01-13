@@ -606,14 +606,15 @@ def restore_all_data(filename):
     return all_data, eps_list
 
 
-def plot(filename):
+def plot(filename, ref_line=[True, True, False, False]):
+
     all_data, eps_list = restore_all_data(filename)
     data = summarize_stats(all_data)
 
     keys = ["disp_train", "disp_test", "error_train", "error_test"]
     xlabels = ['epsilon' for _ in range(4)]
     ylabels = ['violation', 'violation', 'error', 'error']
-    ref_line = [True, True, False, False]
+
     for k, xl, yl, ref in zip(keys, xlabels, ylabels, ref_line):
         _plot(eps_list, data, k, xl, yl, filename, ref)
 
