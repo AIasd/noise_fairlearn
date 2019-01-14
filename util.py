@@ -174,7 +174,7 @@ def corrupt(dataA, dataY, rho, creteria):
 
 def estimate_alpha_beta(cor_dataA, rho):
     rho_a_plus, rho_a_minus = rho
-    if (1 - rho_a_plus - rho_a_minus) > 0:
+    if (1 - rho_a_plus - rho_a_minus) < 0:
         print('before', rho_a_plus, rho_a_minus)
         norm = rho_a_plus+rho_a_minus
         rho_a_plus /= norm
