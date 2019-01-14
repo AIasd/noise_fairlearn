@@ -389,7 +389,7 @@ def run_test_Shai(test, data, sensible_name, learner, creteria):
 
     def _get_stats(clf, dataX, dataA, dataY):
         pred = algorithm.predict(dataX, dataA)
-        disp = fair_measure(pred, dataX, dataA, dataY, creteria)
+        disp = fair_measure(pred, dataA, dataY, creteria)
         error = 1 - accuracy_score(dataY, pred)
         return disp, error
 
@@ -400,6 +400,35 @@ def run_test_Shai(test, data, sensible_name, learner, creteria):
     return res
 
 
+# def run_test_Agarwal(test, data, sensible_name, learner, creteria):
+#
+#     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
+#     print(test)
+#     res_tuple = red.expgrad(dataX, dataA, dataY, learner,
+#                             cons=test["cons_class"](), eps=test["eps"])
+#
+#     res = res_tuple._asdict()
+#     Q = res["best_classifier"]
+#
+#     def _get_stats(clf, dataX, dataA, dataY):
+#         pred = clf(dataX).values
+#         for i in range(len(pred)):
+#             if np.random.random() < pred[i]:
+#                 pred[i] = 1.0
+#             else:
+#                 pred[i] = 0.0
+#         pred = pd.Series(pred)
+#         disp = fair_measure(pred, dataA, dataY, creteria)
+#
+#         error = 1 - accuracy_score(dataY, pred)
+#         return disp, error
+#
+#     res["disp_train"], res["error_train"] = _get_stats(Q, dataX_train, dataA_train, dataY_train)
+#     res["disp_test"], res["error_test"] = _get_stats(Q, dataX_test, dataA_test, dataY_test)
+#
+#     return res
+
+# The following measure
 def run_test_Agarwal(test, data, sensible_name, learner, creteria):
 
     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
@@ -408,57 +437,28 @@ def run_test_Agarwal(test, data, sensible_name, learner, creteria):
                             cons=test["cons_class"](), eps=test["eps"])
 
     res = res_tuple._asdict()
+
     Q = res["best_classifier"]
+    res["n_classifiers"] = len(res["classifiers"])
 
-    def _get_stats(clf, dataX, dataA, dataY):
-        pred = clf(dataX).values
-        for i in range(len(pred)):
-            if np.random.random() < pred[i]:
-                pred[i] = 1.0
-            else:
-                pred[i] = 0.0
-        pred = pd.Series(pred)
-        disp = fair_measure(pred, dataX, dataA, dataY, creteria)
+    disp = test["cons_class"]()
+    disp.init(dataX_train, dataA_train, dataY_train)
 
-        error = 1 - accuracy_score(dataY, pred)
-        return disp, error
+    disp_test = test["cons_class"]()
+    disp_test.init(dataX_test, dataA_test, dataY_test)
 
-    res["disp_train"], res["error_train"] = _get_stats(Q, dataX_train, dataA_train, dataY_train)
-    res["disp_test"], res["error_test"] = _get_stats(Q, dataX_test, dataA_test, dataY_test)
+    error = moments.MisclassError()
+    error.init(dataX_train, dataA_train, dataY_train)
+
+    error_test = moments.MisclassError()
+    error_test.init(dataX_test, dataA_test, dataY_test)
+
+    res["disp_train"] = disp.gamma(Q).max()
+    res["disp_test"] = disp_test.gamma(Q).max()
+    res["error_train"] = error.gamma(Q)[0]
+    res["error_test"] = error_test.gamma(Q)[0]
 
     return res
-
-# The following measure
-# def run_test_Agarwal(test, data, sensible_name, learner, creteria):
-#
-#     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
-#
-#     res_tuple = red.expgrad(dataX, dataA, dataY, learner,
-#                             cons=test["cons_class"](), eps=test["eps"])
-#
-#     res = res_tuple._asdict()
-#
-#     Q = res["best_classifier"]
-#     res["n_classifiers"] = len(res["classifiers"])
-#
-#     disp = test["cons_class"]()
-#     disp.init(dataX_train, dataA_train, dataY_train)
-#
-#     disp_test = test["cons_class"]()
-#     disp_test.init(dataX_test, dataA_test, dataY_test)
-#
-#     error = moments.MisclassError()
-#     error.init(dataX_train, dataA_train, dataY_train)
-#
-#     error_test = moments.MisclassError()
-#     error_test.init(dataX_test, dataA_test, dataY_test)
-#
-#     res["disp_train"] = disp.gamma(Q).max()
-#     res["disp_test"] = disp_test.gamma(Q).max()
-#     res["error_train"] = error.gamma(Q)[0]
-#     res["error_test"] = error_test.gamma(Q)[0]
-#
-#     return res
 
 
 def run_test_Zafar(test, data, sensible_name, learner, creteria):
@@ -498,11 +498,11 @@ def run_test_Zafar(test, data, sensible_name, learner, creteria):
         w = ut.train_model(x, y, x_control, loss_function, apply_fairness_constraints, apply_accuracy_constraint, sep_constraint, sensitive_attrs, sensitive_attrs_to_cov_thresh, gamma)
 
     y_pred_train = np.sign(np.dot(x_train, w))
-    disp_train = fair_measure(y_pred_train, dataX_train, dataA_train, dataY_train, creteria)
+    disp_train = fair_measure(y_pred_train, dataA_train, dataY_train, creteria)
     train_score = accuracy_score(y_train, y_pred_train)
 
     y_pred_test = np.sign(np.dot(x_test, w))
-    disp_test = fair_measure(y_pred_test, dataX_test, dataA_test, dataY_test, creteria)
+    disp_test = fair_measure(y_pred_test, dataA_test, dataY_test, creteria)
     test_score = accuracy_score(y_test, y_pred_test)
 
     res = dict()

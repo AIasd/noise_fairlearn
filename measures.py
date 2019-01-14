@@ -1,6 +1,6 @@
 import numpy as np
 
-def fair_measure(predictions, dataX, dataA, dataY, creteria):
+def fair_measure(predictions, dataA, dataY, creteria):
     eq_sensible_feature = dict()
     sensible_feature_values = list(set(dataA.values.tolist()))
 
