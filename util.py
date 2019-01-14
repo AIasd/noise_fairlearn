@@ -174,7 +174,13 @@ def corrupt(dataA, dataY, rho, creteria):
 
 def estimate_alpha_beta(cor_dataA, rho):
     rho_a_plus, rho_a_minus = rho
-    assert (1 - rho_a_plus - rho_a_minus) > 0
+    if (1 - rho_a_plus - rho_a_minus) > 0:
+        print('before', rho_a_plus, rho_a_minus)
+        norm = rho_a_plus+rho_a_minus
+        rho_a_plus /= norm
+        rho_a_minus /= norm
+        print('after', rho_a_plus, rho_a_minus)
+
 
     pi_a_corr = np.mean([1.0 if a > 0 else 0.0 for a in cor_dataA])
 
@@ -188,8 +194,8 @@ def estimate_alpha_beta(cor_dataA, rho):
     beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
 
     if (1 - alpha_a - beta_a) < 0:
-        print('the sume of alpha_a and beta_a is too large.', alpha_a, beta_a)
-        alpha_a, beta_a = 0.5, 0.5
+        print('the sum of alpha_a and beta_a is too large.', alpha_a, beta_a)
+        alpha_a, beta_a = 0.49, 0.49
 
     return alpha_a, beta_a
 
@@ -645,7 +651,8 @@ def _plot(eps_list, data, k, xl, yl, filename, ref):
 
     # labels = ['cor', 'nocor', 'cor_scale']
     for stat, err, label in zip(curves_mean, curves_std, labels):
-        ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
+        if label != 'denoise' and label != 'cor_scale_est':
+            ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
 
     if ref:
         lims = [
