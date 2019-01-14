@@ -157,7 +157,7 @@ def corrupt(dataA, dataY, rho, creteria):
     rho_a_plus, rho_a_minus = rho
 
     c = 0
-    # print(np.sum(dataA==0), np.sum(dataA==1))
+    print('before corruption:', np.sum(dataA==0), np.sum(dataA==1))
     for i in range(len(dataA)):
         rand = np.random.random()
         if dataA[i] == 1:
@@ -170,15 +170,24 @@ def corrupt(dataA, dataY, rho, creteria):
                 dataA[i] = 1
 
     # print(c, len(dataA))
-    # print(np.sum(dataA==0), np.sum(dataA==1))
+    print('after corruption:', np.sum(dataA==0), np.sum(dataA==1))
 
 def estimate_alpha_beta(cor_dataA, rho):
     rho_a_plus, rho_a_minus = rho
+    assert (1 - rho_a_plus - rho_a_minus) > 0
+
     pi_a_corr = np.mean([1.0 if a > 0 else 0.0 for a in cor_dataA])
 
+    # To correct wrong estimation
+    rho_a_minus = np.min([pi_a_corr, rho_a_minus])
+
+
     pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
+
     alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
     beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
+
+    assert (1 - alpha_a - beta_a) > 0, '%f,%f' % (alpha_a, beta_a)
 
     return alpha_a, beta_a
 
@@ -214,8 +223,8 @@ def denoiseA(data_cor):
     lnl = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
     lnl.fit(X = dataX.values, s = cor_dataA.values)
 
-    rho_a_plus = np.min([lnl.noise_matrix[0][1], 0.5])
-    rho_a_minus = np.min([lnl.noise_matrix[1][0]])
+    rho_a_plus = lnl.noise_matrix[0][1]
+    rho_a_minus = lnl.noise_matrix[1][0]
     rho_est = [rho_a_plus, rho_a_minus]
 
     print(lnl.noise_matrix, rho_a_plus, rho_a_minus)
@@ -316,8 +325,10 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         alpha_a_est, beta_a_est = estimate_alpha_beta(cor_dataA, rho_est)
 
 
-        for test in tests:
-            eps_0 = test['eps']
+        for test_0 in tests:
+            eps_0 = test_0['eps']
+            test = copy.deepcopy(test_0)
+
 
             res_cor = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
@@ -326,9 +337,11 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
             res_denoised = run_test(test, data_denoised, sensible_name, learner,  creteria, verbose, classifier)
 
             test['eps'] = scale_eps(eps_0, alpha_a, beta_a, p_10, p_11, creteria)
+
             res_cor_scale = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
             test['eps'] = scale_eps(eps_0, alpha_a_est, beta_a_est, p_10, p_11, creteria)
+
             res_cor_scale_est = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
 
