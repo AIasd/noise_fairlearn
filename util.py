@@ -187,7 +187,9 @@ def estimate_alpha_beta(cor_dataA, rho):
     alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
     beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
 
-    assert (1 - alpha_a - beta_a) > 0, '%f,%f' % (alpha_a, beta_a)
+    if (1 - alpha_a - beta_a) < 0:
+        print('the sume of alpha_a and beta_a is too large.', alpha_a, beta_a)
+        alpha_a, beta_a = 0.5, 0.5
 
     return alpha_a, beta_a
 
