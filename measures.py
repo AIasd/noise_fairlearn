@@ -1,20 +1,18 @@
 import numpy as np
 
 def fair_measure(predictions, dataA, dataY, creteria):
-    eq_sensible_feature = dict()
-    sensible_feature_values = list(set(dataA.values.tolist()))
+    l_0 = []
+    l_1 = []
+    for i, p in enumerate(predictions):
+        if dataA[i] == 0 and (dataY[i] == 1 or creteria=='DP'):
+            l_0.append(p)
+        if dataA[i] == 1 and (dataY[i] == 1 or creteria=='DP'):
+            l_1.append(p)
 
-    for val in sensible_feature_values:
-        positive_sensitive = 0
-        eq_tmp = 0
-        for i in range(len(predictions)):
-            if dataA[i] == val and (dataY[i] == 1 or creteria=='DP'):
-                positive_sensitive += 1
-                if predictions[i] == 1:
-                    eq_tmp += 1
-        eq_sensible_feature[val] = eq_tmp / positive_sensitive
+    m_0 = np.mean(l_0)
+    m_1 = np.mean(l_1)
+    m = np.mean(predictions)
 
-    disp = np.abs(eq_sensible_feature[sensible_feature_values[0]] -
-                               eq_sensible_feature[sensible_feature_values[1]])
+    return np.max([np.abs(m-m_0), np.abs(m-m_1)])
 
-    return disp
+    # return np.abs(m_0 - m_1)

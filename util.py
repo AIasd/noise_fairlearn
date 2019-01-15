@@ -29,6 +29,9 @@ from random import seed
 from load_data import load_adult, load_compas
 from measures import fair_measure
 
+import seaborn as sns
+sns.set(font_scale = 1.5)
+
 sys.path.insert(0, 'fairlearn/')
 import classred as red
 import moments
@@ -199,7 +202,18 @@ def estimate_alpha_beta(cor_dataA, rho):
 
     return alpha_a, beta_a
 
-def scale_eps(eps, alpha_a, beta_a, p_10, p_11, creteria):
+def get_coeff(ps, rho_est):
+    [p_10, p_11, p_10_cor, p_11_cor] = ps
+    coeff = np.max([p_10_cor, p_11_cor])/np.max([p_10, p_11])
+    rho_a_plus_est, rho_a_minus_est = rho_est
+    p_10_est = (p_10_cor - rho_a_minus_est)/(1 - rho_a_plus_est - rho_a_minus_est)
+    p_11_est = 1 - p_10_est
+    coeff_est = np.max([p_10_cor, p_11_cor])/np.max([p_10_est, p_11_est])
+    return coeff, coeff_est, p_10_est, p_11_est
+
+
+def scale_eps(eps, alpha_a, beta_a, coeff, p_10, p_11, creteria):
+
     new_eps = None
     if creteria == 'DP':
         new_eps = eps * (1-alpha_a-beta_a)
@@ -208,7 +222,11 @@ def scale_eps(eps, alpha_a, beta_a, p_10, p_11, creteria):
         beta_a_p = beta_a*p_11 / ((1-beta_a)*p_10 + beta_a*p_11)
         # print('alpha_a_p:', alpha_a_p, 'beta_a_p:',  beta_a_p)
         new_eps =  eps * (1-alpha_a_p-beta_a_p)
+
+    new_eps *= coeff
     return new_eps
+
+
 
 def denoiseA(data_cor):
     dataX = data_cor[0]
@@ -319,7 +337,7 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         dataset_train, dataset_test = permute_and_split(datamat)
         data_nocor = change_format(dataset_train, dataset_test, sensible_feature, include_sensible)
 
-        p_10, p_11 = get_eta(data_nocor)
+
 
         cor_dataA = copy.deepcopy(data_nocor[2])
         corrupt(cor_dataA, data_nocor[1], rho, creteria)
@@ -327,7 +345,17 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         data_cor = copy.deepcopy(data_nocor)
         data_cor[2] = cor_dataA
 
+        p_10, p_11 = get_eta(data_nocor)
+        p_10_cor, p_11_cor = get_eta(data_cor)
+
         data_denoised, rho_est = denoiseA(data_cor)
+
+        coeff, coeff_est = 1, 1
+
+        if classifier == 'Agarwal':
+            coeff, coeff_est, p_10_est, p_11_est = get_coeff([p_10, p_11, p_10_cor, p_11_cor], rho_est)
+        print(coeff, coeff_est)
+
 
         alpha_a, beta_a = estimate_alpha_beta(cor_dataA, rho)
         alpha_a_est, beta_a_est = estimate_alpha_beta(cor_dataA, rho_est)
@@ -343,13 +371,13 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
             res_nocor = run_test(test, data_nocor, sensible_name, learner,  creteria, verbose, classifier)
 
             res_denoised = run_test(test, data_denoised, sensible_name, learner,  creteria, verbose, classifier)
-
-            test['eps'] = scale_eps(eps_0, alpha_a, beta_a, p_10, p_11, creteria)
-
+            print(test['eps'])
+            test['eps'] = scale_eps(eps_0, alpha_a, beta_a, coeff, p_10, p_11, creteria)
+            print(test['eps'])
             res_cor_scale = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
-            test['eps'] = scale_eps(eps_0, alpha_a_est, beta_a_est, p_10, p_11, creteria)
-
+            test['eps'] = scale_eps(eps_0, alpha_a_est, beta_a_est, coeff_est, p_10_est, p_11_est, creteria)
+            print(test['eps'])
             res_cor_scale_est = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
 
@@ -406,35 +434,6 @@ def run_test_Shai(test, data, sensible_name, learner, creteria):
     return res
 
 
-# def run_test_Agarwal(test, data, sensible_name, learner, creteria):
-#
-#     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
-#     print(test)
-#     res_tuple = red.expgrad(dataX, dataA, dataY, learner,
-#                             cons=test["cons_class"](), eps=test["eps"])
-#
-#     res = res_tuple._asdict()
-#     Q = res["best_classifier"]
-#
-#     def _get_stats(clf, dataX, dataA, dataY):
-#         pred = clf(dataX).values
-#         for i in range(len(pred)):
-#             if np.random.random() < pred[i]:
-#                 pred[i] = 1.0
-#             else:
-#                 pred[i] = 0.0
-#         pred = pd.Series(pred)
-#         disp = fair_measure(pred, dataA, dataY, creteria)
-#
-#         error = 1 - accuracy_score(dataY, pred)
-#         return disp, error
-#
-#     res["disp_train"], res["error_train"] = _get_stats(Q, dataX_train, dataA_train, dataY_train)
-#     res["disp_test"], res["error_test"] = _get_stats(Q, dataX_test, dataA_test, dataY_test)
-#
-#     return res
-
-# The following measure
 def run_test_Agarwal(test, data, sensible_name, learner, creteria):
 
     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
@@ -443,28 +442,51 @@ def run_test_Agarwal(test, data, sensible_name, learner, creteria):
                             cons=test["cons_class"](), eps=test["eps"])
 
     res = res_tuple._asdict()
-
     Q = res["best_classifier"]
-    res["n_classifiers"] = len(res["classifiers"])
 
-    disp = test["cons_class"]()
-    disp.init(dataX_train, dataA_train, dataY_train)
+    def _get_stats(clf, dataX, dataA, dataY):
+        pred = clf(dataX)
+        disp = fair_measure(pred, dataA, dataY, creteria)
 
-    disp_test = test["cons_class"]()
-    disp_test.init(dataX_test, dataA_test, dataY_test)
+        error = np.mean(np.abs(dataY.values-pred.values))
+        return disp, error
 
-    error = moments.MisclassError()
-    error.init(dataX_train, dataA_train, dataY_train)
-
-    error_test = moments.MisclassError()
-    error_test.init(dataX_test, dataA_test, dataY_test)
-
-    res["disp_train"] = disp.gamma(Q).max()
-    res["disp_test"] = disp_test.gamma(Q).max()
-    res["error_train"] = error.gamma(Q)[0]
-    res["error_test"] = error_test.gamma(Q)[0]
+    res["disp_train"], res["error_train"] = _get_stats(Q, dataX_train, dataA_train, dataY_train)
+    res["disp_test"], res["error_test"] = _get_stats(Q, dataX_test, dataA_test, dataY_test)
 
     return res
+
+# The following measure
+# def run_test_Agarwal(test, data, sensible_name, learner, creteria):
+#
+#     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
+#
+#     res_tuple = red.expgrad(dataX, dataA, dataY, learner,
+#                             cons=test["cons_class"](), eps=test["eps"])
+#
+#     res = res_tuple._asdict()
+#
+#     Q = res["best_classifier"]
+#     res["n_classifiers"] = len(res["classifiers"])
+#
+#     disp = test["cons_class"]()
+#     disp.init(dataX_train, dataA_train, dataY_train)
+#
+#     disp_test = test["cons_class"]()
+#     disp_test.init(dataX_test, dataA_test, dataY_test)
+#
+#     error = moments.MisclassError()
+#     error.init(dataX_train, dataA_train, dataY_train)
+#
+#     error_test = moments.MisclassError()
+#     error_test.init(dataX_test, dataA_test, dataY_test)
+#
+#     res["disp_train"] = disp.gamma(Q, True).max()
+#     res["disp_test"] = disp_test.gamma(Q, True).max()
+#     res["error_train"] = error.gamma(Q, True)[0]
+#     res["error_test"] = error_test.gamma(Q, True)[0]
+#
+#     return res
 
 
 def run_test_Zafar(test, data, sensible_name, learner, creteria):
@@ -651,15 +673,17 @@ def _plot(eps_list, data, k, xl, yl, filename, ref):
 
     # labels = ['cor', 'nocor', 'cor_scale']
     for stat, err, label in zip(curves_mean, curves_std, labels):
-        if label != 'denoise' and label != 'cor_scale_est':
-            ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
-
+        # if label != 'denoise' and label != 'cor_scale_est':
+        #     ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
+        ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
     if ref:
         lims = [
             np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
             np.max([ax.get_xlim(), ax.get_ylim()])   # max of both axes
         ]
-        ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+        lims2 = copy.deepcopy(lims)
+        # lims[1] /= 2
+        ax.plot(lims, lims2, 'k-', alpha=0.75, zorder=0)
 
     title_content = filename
     try:
