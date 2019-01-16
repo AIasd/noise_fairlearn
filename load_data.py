@@ -45,6 +45,19 @@ def check_data_file(fname, addr):
     else:
         print("File found in current directory..")
 
+def load_law(frac=1):
+    '''
+    ['decile1b', 'decile3', 'lsat', 'ugpa', 'zfygpa', 'zgpa', 'fulltime',
+      'fam_inc', 'male', 'pass_bar', 'tier', 'racetxt']
+    'racetxt' can have values {'Hispanic', 'American Indian / Alaskan Native', 'Black', 'White', 'Other', 'Asian'}
+    '''
+    LAW_FILE = 'datasets/law_data_clean.csv'
+    names = ['decile1b', 'decile3', 'lsat', 'ugpa', 'zfygpa', 'zgpa', 'fulltime', 'fam_inc', 'male', 'pass_bar', 'tier', 'racetxt']
+    data = pd.read_csv(LAW_FILE, names=names)
+
+
+    return data
+
 
 
 def load_adult(frac=1, scaler=True):

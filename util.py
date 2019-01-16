@@ -23,14 +23,15 @@ import pickle
 import copy
 import sys
 import re
+import os
 from collections import namedtuple
 from random import seed
 
-from load_data import load_adult, load_compas
+from load_data import load_adult, load_compas, load_law
 from measures import fair_measure
 
 import seaborn as sns
-sns.set(font_scale = 1.5)
+sns.set(font_scale = 1.25)
 
 sys.path.insert(0, 'fairlearn/')
 import classred as red
@@ -222,6 +223,7 @@ def denoiseA(data_cor, rho):
     # Check recovery accuracy
     auc1 = np.mean(dataA.values==cor_dataA.values)
     auc2 = np.mean(dataA.values==denoised_dataA.values)
+    print(dataA.values, denoised_dataA.values)
     print('auc:', auc1, auc2)
     print(lnl2.noise_matrix, rho_a_plus, rho_a_minus)
 
@@ -264,6 +266,10 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     if dataset == 'adult':
         datamat = load_adult(frac)
         sensible_name = 'gender'
+        sensible_feature = 9
+    elif dataset == 'law':
+        datamat = load_law(frac)
+        sensible_name = 'race'
         sensible_feature = 9
     else:
         datamat = load_compas(frac)
@@ -529,14 +535,20 @@ def restore_all_data(filename):
     return all_data, eps_list
 
 
-def plot(filename, ref_line=[True, True, False, False], mode='three', save=False):
+def plot(filename, ref_line=[True, True, False, False], mode='four', save=False):
+    y_label = 'DDP'
+
+    p_eo = re.compile('EO')
+    if p_eo.search(filename):
+        y_label = 'DEO'
+
 
     all_data, eps_list = restore_all_data(filename)
     data = summarize_stats(all_data)
 
     keys = ["disp_train", "disp_test", "error_train", "error_test"]
-    xlabels = ['epsilon' for _ in range(4)]
-    ylabels = ['violation', 'violation', 'error', 'error']
+    xlabels = ['tau' for _ in range(4)]
+    ylabels = [y_label, y_label, 'error rate', 'error rate']
 
     for k, xl, yl, ref in zip(keys, xlabels, ylabels, ref_line):
         _plot(eps_list, data, k, xl, yl, filename, ref, mode, save)
@@ -547,14 +559,14 @@ def _plot(eps_list, data, k, xl, yl, filename, ref, mode, save):
     Plot four graphs. Internal routine for plot
     '''
     curves_mean, curves_std = data
-    labels = ['cor', 'nocor', 'denoise', 'cor_scale', 'cor_scale_est']
+    labels = ['cor', 'nocor', 'denoise', 'cor_scale']
 
     fig, ax = plt.subplots()
 
     # labels = ['cor', 'nocor', 'cor_scale']
     for stat, err, label in zip(curves_mean, curves_std, labels):
         if mode == 'three':
-            if label != 'denoise' and label != 'cor_scale_est':
+            if label != 'denoise':
                 ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
         else:
             ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
@@ -575,13 +587,17 @@ def _plot(eps_list, data, k, xl, yl, filename, ref, mode, save):
         pass
 
     ax.legend(loc='upper left', framealpha=0.1)
-    ax.set_title('epsilon VS '+k+':'+title_content)
+    ax.set_title('epsilon VS '+k+'_'+title_content)
     ax.set_xlabel(xl)
     ax.set_ylabel(yl)
     plt.show()
 
+    save_dir = 'imgs/'
+    if not os.path.isdir(save_dir):
+        os.mkdir(save_dir)
+
     if save:
-        fig.savefig(k+':'+title_content+'.pdf')
+        fig.savefig(save_dir+k+'_'+title_content+'.pdf')
 
 
 
