@@ -219,7 +219,7 @@ def scale_eps(eps, alpha_a, beta_a, p_01, p_11, creteria):
 
 
 
-def denoiseA(data_cor):
+def denoiseA(data_cor, rho):
     # classifiers = [
     #     GaussianNB(),
     #     LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'),
@@ -232,28 +232,36 @@ def denoiseA(data_cor):
     #     QuadraticDiscriminantAnalysis()
     # ]
 
+    rho_a_plus, rho_a_minus = rho
+
     dataX = data_cor[0]
     cor_dataA = data_cor[2]
     dataA = data_cor[5]
 
-    lnl = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
-    lnl.fit(X = dataX.values, s = cor_dataA.values)
+    lnl2 = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
+    noise_matrix = np.array([[1-rho_a_plus, rho_a_plus],[rho_a_minus, 1-rho_a_minus]])
+    lnl2.fit(X = dataX.values, s = cor_dataA.values, noise_matrix=noise_matrix)
 
-    rho_a_plus = lnl.noise_matrix[0][1]
-    rho_a_minus = lnl.noise_matrix[1][0]
-    rho_est = [rho_a_plus, rho_a_minus]
-
-    print(lnl.noise_matrix, rho_a_plus, rho_a_minus)
-
-    denoised_dataA = pd.Series(lnl.predict(dataX.values))
+    denoised_dataA = pd.Series(lnl2.predict(dataX.values))
+    data_denoised = copy.deepcopy(data_cor)
+    data_denoised[2] = denoised_dataA
 
     # Check recovery accuracy
     auc1 = np.mean(dataA.values==cor_dataA.values)
     auc2 = np.mean(dataA.values==denoised_dataA.values)
     print('auc:', auc1, auc2)
+    print(lnl2.noise_matrix, rho_a_plus, rho_a_minus)
 
-    data_denoised = copy.deepcopy(data_cor)
-    data_denoised[2] = denoised_dataA
+
+    lnl = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
+    lnl.fit(X = dataX.values, s = cor_dataA.values)
+
+    rho_a_plus_est = lnl.noise_matrix[0][1]
+    rho_a_minus_est = lnl.noise_matrix[1][0]
+    rho_est = [rho_a_plus_est, rho_a_minus_est]
+
+    print(lnl.noise_matrix, rho_a_plus_est, rho_a_minus_est)
+
 
     return data_denoised, rho_est
 
@@ -343,7 +351,7 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         p_01, p_11 = get_eta(data_nocor)
         p_01_cor, p_11_cor = get_eta(data_cor)
 
-        data_denoised, rho_est = denoiseA(data_cor)
+        data_denoised, rho_est = denoiseA(data_cor, rho)
 
         p_01_est, p_11_est = est_p(p_01_cor, p_11_cor, rho_est)
 
@@ -638,7 +646,7 @@ def restore_all_data(filename):
     return all_data, eps_list
 
 
-def plot(filename, ref_line=[True, True, False, False], mode='three'):
+def plot(filename, ref_line=[True, True, False, False], mode='three', save=False):
 
     all_data, eps_list = restore_all_data(filename)
     data = summarize_stats(all_data)
@@ -648,10 +656,10 @@ def plot(filename, ref_line=[True, True, False, False], mode='three'):
     ylabels = ['violation', 'violation', 'error', 'error']
 
     for k, xl, yl, ref in zip(keys, xlabels, ylabels, ref_line):
-        _plot(eps_list, data, k, xl, yl, filename, ref, mode)
+        _plot(eps_list, data, k, xl, yl, filename, ref, mode, save)
 
 
-def _plot(eps_list, data, k, xl, yl, filename, ref, mode):
+def _plot(eps_list, data, k, xl, yl, filename, ref, mode, save):
     '''
     Plot four graphs. Internal routine for plot
     '''
@@ -688,3 +696,6 @@ def _plot(eps_list, data, k, xl, yl, filename, ref, mode):
     ax.set_xlabel(xl)
     ax.set_ylabel(yl)
     plt.show()
+
+    if save:
+        fig.savefig(k+':'+title_content+'.pdf')
