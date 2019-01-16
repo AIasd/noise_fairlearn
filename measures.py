@@ -11,8 +11,8 @@ def fair_measure(predictions, dataA, dataY, creteria):
 
     m_0 = np.mean(l_0)
     m_1 = np.mean(l_1)
-    m = np.mean(predictions)
 
-    return np.max([np.abs(m-m_0), np.abs(m-m_1)])
+    # m = np.mean(predictions)
+    # return np.max([np.abs(m-m_0), np.abs(m-m_1)])
 
-    # return np.abs(m_0 - m_1)
+    return np.abs(m_0 - m_1)

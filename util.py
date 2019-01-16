@@ -73,7 +73,6 @@ keys = ["disp_train", "disp_test", "error_train", "error_test"]
 
 
 
-
 def change_format(dataset_train, dataset_test, sensible_feature, include_sensible):
     '''
     Change data format into that needed for Agarwal classifier. More preprocessing will be needed if Zafar's classifier gets used.
@@ -117,65 +116,53 @@ def permute_and_split(datamat, permute=True, train_ratio=0.8):
 
     cutoff = int(np.floor(len(datamat)*train_ratio))
 
-
     dataset_train = namedtuple('_', 'data, target')(datamat[:cutoff, :-1], datamat[:cutoff, -1])
     dataset_test = namedtuple('_', 'data, target')(datamat[cutoff:, :-1], datamat[cutoff:, -1])
 
     return dataset_train, dataset_test
 
-def get_eta(data_nocor):
+def get_eta(data):
     '''
     Calculate Pr[Y=1|A=0] and Pr[Y=1|A=1] in training set.
     '''
-    dataY = data_nocor[1]
-    dataA = data_nocor[2]
-    c_a_0 = 0
-    c_a_1 = 0
-    c_10 = 0
-    c_11 = 0
+    dataY, dataA = data[1], data[2]
+    c_a_0, c_a_1, c_01, c_11 = 0, 0, 0, 0
+
     for y, a in zip(dataY, dataA):
         if a == 0:
             c_a_0 += 1
             if y == 1:
-                c_10 += 1
+                c_01 += 1
         else:
             c_a_1 += 1
             if y == 1:
                 c_11 += 1
-    p_10 = c_10 / c_a_0
+    p_01 = c_01 / c_a_0
     p_11 = c_11 / c_a_1
-    # print('p_10:', p_10, 'p_11:', p_11)
-    return p_10, p_11
+    # print('p_01:', p_01, 'p_11:', p_11)
+    return p_01, p_11
 
 def corrupt(dataA, dataY, rho, creteria):
     '''
     Flip values in dataA with probability rho[0] and rho[1] for positive/negative values respectively.
     '''
-
-    # pi_a = None
-    # if creteria == 'DP':
-    #     pi_a = np.mean([1.0 if a > 0 else 0.0 for a in dataA])
-    # elif creteria == 'EO':
-    #     pi_a = np.sum([1.0 if (a > 0 and y==1) else 0.0 for a, y in zip(dataA, dataY)]) / np.sum([1.0 if y==1 else 0.0 for y in dataY])
     rho_a_plus, rho_a_minus = rho
 
-    c = 0
     print('before corruption:', np.sum(dataA==0), np.sum(dataA==1))
     for i in range(len(dataA)):
         rand = np.random.random()
         if dataA[i] == 1:
             if rand < rho_a_plus:
-                c += 1
                 dataA[i] = 0
         else:
             if rand < rho_a_minus:
-                c -= 1
                 dataA[i] = 1
 
-    # print(c, len(dataA))
     print('after corruption:', np.sum(dataA==0), np.sum(dataA==1))
 
-def estimate_alpha_beta(cor_dataA, rho):
+
+
+def estimate_alpha_beta(cor_dataA, dataY, rho, creteria):
     rho_a_plus, rho_a_minus = rho
     if (1 - rho_a_plus - rho_a_minus) < 0:
         print('before', rho_a_plus, rho_a_minus)
@@ -184,12 +171,15 @@ def estimate_alpha_beta(cor_dataA, rho):
         rho_a_minus /= norm
         print('after', rho_a_plus, rho_a_minus)
 
-
+    # pi_a_corr = None
+    # if creteria == 'EO':
+    #     pi_a_corr = np.mean([1.0 if a > 0 and y > 0 else 0.0 for a, y in zip(cor_dataA, dataY)])
+    # else:
     pi_a_corr = np.mean([1.0 if a > 0 else 0.0 for a in cor_dataA])
+
 
     # To correct wrong estimation
     rho_a_minus = np.min([pi_a_corr, rho_a_minus])
-
 
     pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
 
@@ -202,37 +192,34 @@ def estimate_alpha_beta(cor_dataA, rho):
 
     return alpha_a, beta_a
 
-def get_coeff(ps, rho_est):
-    [p_10, p_11, p_10_cor, p_11_cor] = ps
-    coeff = np.max([p_10_cor, p_11_cor])/np.max([p_10, p_11])
+def est_p(p_01_cor, p_11_cor, rho_est):
+    '''
+    estimate p_01 and p_11 using p_01_cor and rho_est
+    '''
+
     rho_a_plus_est, rho_a_minus_est = rho_est
-    p_10_est = (p_10_cor - rho_a_minus_est)/(1 - rho_a_plus_est - rho_a_minus_est)
-    p_11_est = 1 - p_10_est
-    coeff_est = np.max([p_10_cor, p_11_cor])/np.max([p_10_est, p_11_est])
-    return coeff, coeff_est, p_10_est, p_11_est
+    p_01_est = (p_01_cor - rho_a_minus_est)/(1 - rho_a_plus_est - rho_a_minus_est)
+    p_11_est = (p_11_cor - rho_a_minus_est)/(1 - rho_a_plus_est - rho_a_minus_est)
+
+    return p_01_est, p_11_est
 
 
-def scale_eps(eps, alpha_a, beta_a, coeff, p_10, p_11, creteria):
+def scale_eps(eps, alpha_a, beta_a, p_01, p_11, creteria):
 
     new_eps = None
     if creteria == 'DP':
         new_eps = eps * (1-alpha_a-beta_a)
     elif creteria == 'EO':
-        alpha_a_p = alpha_a*p_10 / ((1-alpha_a)*p_11 + alpha_a*p_10)
-        beta_a_p = beta_a*p_11 / ((1-beta_a)*p_10 + beta_a*p_11)
+        alpha_a_p = alpha_a*p_01 / ((1-alpha_a)*p_11 + alpha_a*p_01)
+        beta_a_p = beta_a*p_11 / ((1-beta_a)*p_01 + beta_a*p_11)
         # print('alpha_a_p:', alpha_a_p, 'beta_a_p:',  beta_a_p)
         new_eps =  eps * (1-alpha_a_p-beta_a_p)
 
-    new_eps *= coeff
     return new_eps
 
 
 
 def denoiseA(data_cor):
-    dataX = data_cor[0]
-    cor_dataA = data_cor[2]
-    dataA = data_cor[5]
-
     # classifiers = [
     #     GaussianNB(),
     #     LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'),
@@ -245,6 +232,9 @@ def denoiseA(data_cor):
     #     QuadraticDiscriminantAnalysis()
     # ]
 
+    dataX = data_cor[0]
+    cor_dataA = data_cor[2]
+    dataA = data_cor[5]
 
     lnl = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
     lnl.fit(X = dataX.values, s = cor_dataA.values)
@@ -264,23 +254,6 @@ def denoiseA(data_cor):
 
     data_denoised = copy.deepcopy(data_cor)
     data_denoised[2] = denoised_dataA
-
-    # c_1 = 0
-    # c_0 = 0
-    # tot_1 = 0
-    # tot_0 = 0
-    # for i, j in zip(cor_dataA, denoised_dataA):
-    #     if i == 1:
-    #         tot_1 += 1
-    #     else:
-    #         tot_0 += 1
-    #     if i != j:
-    #         if i==1:
-    #             c_1 += 1
-    #         else:
-    #             c_0 += 1
-
-    # print(c_1, tot_1, ';', c_0, tot_0)
 
     return data_denoised, rho_est
 
@@ -337,28 +310,46 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         dataset_train, dataset_test = permute_and_split(datamat)
         data_nocor = change_format(dataset_train, dataset_test, sensible_feature, include_sensible)
 
-
-
-        cor_dataA = copy.deepcopy(data_nocor[2])
-        corrupt(cor_dataA, data_nocor[1], rho, creteria)
-
+        dataY = data_nocor[1]
+        dataA = data_nocor[2]
+        cor_dataA = copy.deepcopy(dataA)
         data_cor = copy.deepcopy(data_nocor)
+
+        corrupt(cor_dataA, data_nocor[1], rho, creteria)
         data_cor[2] = cor_dataA
 
-        p_10, p_11 = get_eta(data_nocor)
-        p_10_cor, p_11_cor = get_eta(data_cor)
+        # rho_a_plus, rho_a_minus = rho
+        #
+        # pi_a_corr = np.sum([1.0 if a > 0 and y > 0 else 0.0 for a, y in zip(cor_dataA, dataY)])/ np.sum([1.0 if y > 0 else 0.0 for y in dataY])
+        #
+        # pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
+        #
+        # alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
+        # beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
+        # print('alpha_a', alpha_a, beta_a)
+        #
+        # p_01, p_11 = get_eta(data_nocor)
+        #
+        #
+        # pi_a_corr = np.mean([1.0 if a > 0 else 0.0 for a in cor_dataA])
+        # pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
+        # alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
+        # beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
+        #
+        # alpha_a_p = alpha_a*p_01 / ((1-alpha_a)*p_11 + alpha_a*p_01)
+        # beta_a_p = beta_a*p_11 / ((1-beta_a)*p_01 + beta_a*p_11)
+        # print('alpha_a_p', alpha_a_p, beta_a_p)
+
+        p_01, p_11 = get_eta(data_nocor)
+        p_01_cor, p_11_cor = get_eta(data_cor)
 
         data_denoised, rho_est = denoiseA(data_cor)
 
-        coeff, coeff_est = 1, 1
-
-        if classifier == 'Agarwal':
-            coeff, coeff_est, p_10_est, p_11_est = get_coeff([p_10, p_11, p_10_cor, p_11_cor], rho_est)
-        print(coeff, coeff_est)
+        p_01_est, p_11_est = est_p(p_01_cor, p_11_cor, rho_est)
 
 
-        alpha_a, beta_a = estimate_alpha_beta(cor_dataA, rho)
-        alpha_a_est, beta_a_est = estimate_alpha_beta(cor_dataA, rho_est)
+        alpha_a, beta_a = estimate_alpha_beta(cor_dataA, dataY, rho, creteria)
+        alpha_a_est, beta_a_est = estimate_alpha_beta(cor_dataA, dataY, rho_est, creteria)
 
 
         for test_0 in tests:
@@ -371,13 +362,11 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
             res_nocor = run_test(test, data_nocor, sensible_name, learner,  creteria, verbose, classifier)
 
             res_denoised = run_test(test, data_denoised, sensible_name, learner,  creteria, verbose, classifier)
-            print(test['eps'])
-            test['eps'] = scale_eps(eps_0, alpha_a, beta_a, coeff, p_10, p_11, creteria)
-            print(test['eps'])
+
+            test['eps'] = scale_eps(eps_0, alpha_a, beta_a, p_01, p_11, creteria)
             res_cor_scale = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
-            test['eps'] = scale_eps(eps_0, alpha_a_est, beta_a_est, coeff_est, p_10_est, p_11_est, creteria)
-            print(test['eps'])
+            test['eps'] = scale_eps(eps_0, alpha_a_est, beta_a_est, p_01_est, p_11_est, creteria)
             res_cor_scale_est = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
 
@@ -649,7 +638,7 @@ def restore_all_data(filename):
     return all_data, eps_list
 
 
-def plot(filename, ref_line=[True, True, False, False]):
+def plot(filename, ref_line=[True, True, False, False], mode='three'):
 
     all_data, eps_list = restore_all_data(filename)
     data = summarize_stats(all_data)
@@ -659,10 +648,10 @@ def plot(filename, ref_line=[True, True, False, False]):
     ylabels = ['violation', 'violation', 'error', 'error']
 
     for k, xl, yl, ref in zip(keys, xlabels, ylabels, ref_line):
-        _plot(eps_list, data, k, xl, yl, filename, ref)
+        _plot(eps_list, data, k, xl, yl, filename, ref, mode)
 
 
-def _plot(eps_list, data, k, xl, yl, filename, ref):
+def _plot(eps_list, data, k, xl, yl, filename, ref, mode):
     '''
     Plot four graphs. Internal routine for plot
     '''
@@ -673,9 +662,11 @@ def _plot(eps_list, data, k, xl, yl, filename, ref):
 
     # labels = ['cor', 'nocor', 'cor_scale']
     for stat, err, label in zip(curves_mean, curves_std, labels):
-        # if label != 'denoise' and label != 'cor_scale_est':
-        #     ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
-        ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
+        if mode == 'three':
+            if label != 'denoise' and label != 'cor_scale_est':
+                ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
+        else:
+            ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
     if ref:
         lims = [
             np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes

@@ -172,6 +172,7 @@ class _Lagrangian:
         h = lambda X: classifier.predict(X)
         h_error = self.obj.gamma(h)[0]
         h_gamma = self.cons.gamma(h)
+
         h_val = h_error + h_gamma.dot(lambda_vec)
 
         if not self.hs.empty:
@@ -284,6 +285,7 @@ def expgrad(dataX, dataA, dataY, learner, cons=moments.DP(), eps=0.01,
                        debug=debug)
 
     theta = pd.Series(0, lagr.cons.index)
+
     Qsum = pd.Series()
     lambdas = pd.DataFrame()
     gaps_EG = []
