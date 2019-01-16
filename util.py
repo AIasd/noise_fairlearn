@@ -121,26 +121,7 @@ def permute_and_split(datamat, permute=True, train_ratio=0.8):
 
     return dataset_train, dataset_test
 
-def get_eta(data):
-    '''
-    Calculate Pr[Y=1|A=0] and Pr[Y=1|A=1] in training set.
-    '''
-    dataY, dataA = data[1], data[2]
-    c_a_0, c_a_1, c_01, c_11 = 0, 0, 0, 0
 
-    for y, a in zip(dataY, dataA):
-        if a == 0:
-            c_a_0 += 1
-            if y == 1:
-                c_01 += 1
-        else:
-            c_a_1 += 1
-            if y == 1:
-                c_11 += 1
-    p_01 = c_01 / c_a_0
-    p_11 = c_11 / c_a_1
-    # print('p_01:', p_01, 'p_11:', p_11)
-    return p_01, p_11
 
 def corrupt(dataA, dataY, rho, creteria):
     '''
@@ -171,11 +152,11 @@ def estimate_alpha_beta(cor_dataA, dataY, rho, creteria):
         rho_a_minus /= norm
         print('after', rho_a_plus, rho_a_minus)
 
-    # pi_a_corr = None
-    # if creteria == 'EO':
-    #     pi_a_corr = np.mean([1.0 if a > 0 and y > 0 else 0.0 for a, y in zip(cor_dataA, dataY)])
-    # else:
-    pi_a_corr = np.mean([1.0 if a > 0 else 0.0 for a in cor_dataA])
+    pi_a_corr = None
+    if creteria == 'EO':
+        pi_a_corr = np.sum([1.0 if a > 0 and y > 0 else 0.0 for a, y in zip(cor_dataA, dataY)])/ np.sum([1.0 if y > 0 else 0.0 for y in dataY])
+    else:
+        pi_a_corr = np.mean([1.0 if a > 0 else 0.0 for a in cor_dataA])
 
 
     # To correct wrong estimation
@@ -192,30 +173,22 @@ def estimate_alpha_beta(cor_dataA, dataY, rho, creteria):
 
     return alpha_a, beta_a
 
-def est_p(p_01_cor, p_11_cor, rho_est):
-    '''
-    estimate p_01 and p_11 using p_01_cor and rho_est
-    '''
-
-    rho_a_plus_est, rho_a_minus_est = rho_est
-    p_01_est = (p_01_cor - rho_a_minus_est)/(1 - rho_a_plus_est - rho_a_minus_est)
-    p_11_est = (p_11_cor - rho_a_minus_est)/(1 - rho_a_plus_est - rho_a_minus_est)
-
-    return p_01_est, p_11_est
 
 
-def scale_eps(eps, alpha_a, beta_a, p_01, p_11, creteria):
 
-    new_eps = None
-    if creteria == 'DP':
-        new_eps = eps * (1-alpha_a-beta_a)
-    elif creteria == 'EO':
-        alpha_a_p = alpha_a*p_01 / ((1-alpha_a)*p_11 + alpha_a*p_01)
-        beta_a_p = beta_a*p_11 / ((1-beta_a)*p_01 + beta_a*p_11)
-        # print('alpha_a_p:', alpha_a_p, 'beta_a_p:',  beta_a_p)
-        new_eps =  eps * (1-alpha_a_p-beta_a_p)
 
-    return new_eps
+def scale_eps(eps, alpha_a, beta_a):
+
+    # new_eps = None
+    # if creteria == 'DP':
+    #     new_eps = eps * (1-alpha_a-beta_a)
+    # elif creteria == 'EO':
+    #     alpha_a_p = alpha_a*p_01 / ((1-alpha_a)*p_11 + alpha_a*p_01)
+    #     beta_a_p = beta_a*p_11 / ((1-beta_a)*p_01 + beta_a*p_11)
+    #     # print('alpha_a_p:', alpha_a_p, 'beta_a_p:',  beta_a_p)
+    #     new_eps =  eps * (1-alpha_a_p-beta_a_p)
+
+    return eps * (1 - alpha_a - beta_a)
 
 
 
@@ -308,7 +281,7 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     return all_data
 
 def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, creteria, classifier, include_sensible, verbose):
-    n = 5
+    n = 4
     all_data = [{k:[[] for _ in range(trials)] for k in keys} for _ in range(n)]
 
     start = time.time()
@@ -326,34 +299,14 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         corrupt(cor_dataA, data_nocor[1], rho, creteria)
         data_cor[2] = cor_dataA
 
-        # rho_a_plus, rho_a_minus = rho
-        #
-        # pi_a_corr = np.sum([1.0 if a > 0 and y > 0 else 0.0 for a, y in zip(cor_dataA, dataY)])/ np.sum([1.0 if y > 0 else 0.0 for y in dataY])
-        #
-        # pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
-        #
-        # alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
-        # beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
-        # print('alpha_a', alpha_a, beta_a)
-        #
-        # p_01, p_11 = get_eta(data_nocor)
-        #
-        #
-        # pi_a_corr = np.mean([1.0 if a > 0 else 0.0 for a in cor_dataA])
-        # pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
-        # alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
-        # beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
-        #
-        # alpha_a_p = alpha_a*p_01 / ((1-alpha_a)*p_11 + alpha_a*p_01)
-        # beta_a_p = beta_a*p_11 / ((1-beta_a)*p_01 + beta_a*p_11)
-        # print('alpha_a_p', alpha_a_p, beta_a_p)
 
-        p_01, p_11 = get_eta(data_nocor)
-        p_01_cor, p_11_cor = get_eta(data_cor)
+
+        # p_01, p_11 = get_eta(data_nocor)
+        # p_01_cor, p_11_cor = get_eta(data_cor)
 
         data_denoised, rho_est = denoiseA(data_cor, rho)
 
-        p_01_est, p_11_est = est_p(p_01_cor, p_11_cor, rho_est)
+        # p_01_est, p_11_est = est_p(p_01_cor, p_11_cor, rho_est)
 
 
         alpha_a, beta_a = estimate_alpha_beta(cor_dataA, dataY, rho, creteria)
@@ -371,15 +324,15 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
 
             res_denoised = run_test(test, data_denoised, sensible_name, learner,  creteria, verbose, classifier)
 
-            test['eps'] = scale_eps(eps_0, alpha_a, beta_a, p_01, p_11, creteria)
+            test['eps'] = scale_eps(eps_0, alpha_a, beta_a)
             res_cor_scale = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
-            test['eps'] = scale_eps(eps_0, alpha_a_est, beta_a_est, p_01_est, p_11_est, creteria)
-            res_cor_scale_est = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
+            # test['eps'] = scale_eps(eps_0, alpha_a_est, beta_a_est, p_01_est, p_11_est, creteria)
+            # res_cor_scale_est = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
 
-            results = [res_cor, res_nocor, res_denoised, res_cor_scale, res_cor_scale_est]
-            # results = [res_cor, res_nocor, res_cor_scale]
+            # results = [res_cor, res_nocor, res_denoised, res_cor_scale, res_cor_scale_est]
+            results = [res_cor, res_nocor, res_denoised, res_cor_scale]
 
             for k in keys:
                 for j in range(n):
@@ -453,37 +406,7 @@ def run_test_Agarwal(test, data, sensible_name, learner, creteria):
 
     return res
 
-# The following measure
-# def run_test_Agarwal(test, data, sensible_name, learner, creteria):
-#
-#     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
-#
-#     res_tuple = red.expgrad(dataX, dataA, dataY, learner,
-#                             cons=test["cons_class"](), eps=test["eps"])
-#
-#     res = res_tuple._asdict()
-#
-#     Q = res["best_classifier"]
-#     res["n_classifiers"] = len(res["classifiers"])
-#
-#     disp = test["cons_class"]()
-#     disp.init(dataX_train, dataA_train, dataY_train)
-#
-#     disp_test = test["cons_class"]()
-#     disp_test.init(dataX_test, dataA_test, dataY_test)
-#
-#     error = moments.MisclassError()
-#     error.init(dataX_train, dataA_train, dataY_train)
-#
-#     error_test = moments.MisclassError()
-#     error_test.init(dataX_test, dataA_test, dataY_test)
-#
-#     res["disp_train"] = disp.gamma(Q, True).max()
-#     res["disp_test"] = disp_test.gamma(Q, True).max()
-#     res["error_train"] = error.gamma(Q, True)[0]
-#     res["error_test"] = error_test.gamma(Q, True)[0]
-#
-#     return res
+
 
 
 def run_test_Zafar(test, data, sensible_name, learner, creteria):
@@ -539,46 +462,6 @@ def run_test_Zafar(test, data, sensible_name, learner, creteria):
     return res
 
 
-# def run_test_Zafar(test, data, sensible_name, learner, creteria):
-#
-#     x, y, x_control, x_train, y_train, x_control_train, x_test, y_test, x_control_test = convert_data_format_Zafar(data, sensible_name)
-#     sensitive_attrs = [sensible_name]
-#
-#     loss_function = "logreg" # perform the experiments with logistic regression
-#     EPS = 1e-6
-#
-#     cons_type = 1 # FPR constraint -- just change the cons_type, the rest of parameters should stay the same
-#     tau = 5.0
-#     mu = 1.2
-#     sensitive_attrs_to_cov_thresh = {sensible_name: {0:{0:0, 1:test['eps']}, 1:{0:0, 1:test['eps']}, 2:{0:0, 1:test['eps']}}} # zero covariance threshold, means try to get the fairest solution
-#     cons_params = {"cons_type": cons_type,
-#                     "tau": tau,
-#                     "mu": mu,
-#                     "sensitive_attrs_to_cov_thresh": sensitive_attrs_to_cov_thresh}
-#
-#
-#     def _train_test_classifier():
-#         w = fdm.train_model_disp_mist(x, y, x_control, loss_function, EPS, cons_params)
-#
-#
-#
-#         train_score, test_score, cov_all_train, cov_all_test, s_attr_to_fp_fn_train, s_attr_to_fp_fn_test = fdm.get_clf_stats(w, x_train, y_train, x_control_train, x_test, y_test, x_control_test, sensitive_attrs)
-#         disp_test = np.abs(s_attr_to_fp_fn_test[sensible_name][0]["fpr"] - s_attr_to_fp_fn_test[sensible_name][0]["fpr"])
-#         disp_train = np.abs(s_attr_to_fp_fn_train[sensible_name][0]["fpr"] - s_attr_to_fp_fn_train[sensible_name][0]["fpr"])
-#
-#
-#         # accuracy and FPR are for the test because we need of for plotting
-#         return disp_test, disp_train, test_score, train_score
-#
-#
-#     disp_test, disp_train, test_score, train_score  = _train_test_classifier()
-#     res = dict()
-#     res["disp_train"] = disp_train
-#     res["disp_test"] = disp_test
-#     res["error_train"] = 1-train_score
-#     res["error_test"] = 1-test_score
-#
-#     return res
 
 
 
@@ -699,3 +582,134 @@ def _plot(eps_list, data, k, xl, yl, filename, ref, mode, save):
 
     if save:
         fig.savefig(k+':'+title_content+'.pdf')
+
+
+
+
+# The following measure
+# def run_test_Agarwal(test, data, sensible_name, learner, creteria):
+#
+#     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
+#
+#     res_tuple = red.expgrad(dataX, dataA, dataY, learner,
+#                             cons=test["cons_class"](), eps=test["eps"])
+#
+#     res = res_tuple._asdict()
+#
+#     Q = res["best_classifier"]
+#     res["n_classifiers"] = len(res["classifiers"])
+#
+#     disp = test["cons_class"]()
+#     disp.init(dataX_train, dataA_train, dataY_train)
+#
+#     disp_test = test["cons_class"]()
+#     disp_test.init(dataX_test, dataA_test, dataY_test)
+#
+#     error = moments.MisclassError()
+#     error.init(dataX_train, dataA_train, dataY_train)
+#
+#     error_test = moments.MisclassError()
+#     error_test.init(dataX_test, dataA_test, dataY_test)
+#
+#     res["disp_train"] = disp.gamma(Q, True).max()
+#     res["disp_test"] = disp_test.gamma(Q, True).max()
+#     res["error_train"] = error.gamma(Q, True)[0]
+#     res["error_test"] = error_test.gamma(Q, True)[0]
+#
+#     return res
+
+# def run_test_Zafar(test, data, sensible_name, learner, creteria):
+#
+#     x, y, x_control, x_train, y_train, x_control_train, x_test, y_test, x_control_test = convert_data_format_Zafar(data, sensible_name)
+#     sensitive_attrs = [sensible_name]
+#
+#     loss_function = "logreg" # perform the experiments with logistic regression
+#     EPS = 1e-6
+#
+#     cons_type = 1 # FPR constraint -- just change the cons_type, the rest of parameters should stay the same
+#     tau = 5.0
+#     mu = 1.2
+#     sensitive_attrs_to_cov_thresh = {sensible_name: {0:{0:0, 1:test['eps']}, 1:{0:0, 1:test['eps']}, 2:{0:0, 1:test['eps']}}} # zero covariance threshold, means try to get the fairest solution
+#     cons_params = {"cons_type": cons_type,
+#                     "tau": tau,
+#                     "mu": mu,
+#                     "sensitive_attrs_to_cov_thresh": sensitive_attrs_to_cov_thresh}
+#
+#
+#     def _train_test_classifier():
+#         w = fdm.train_model_disp_mist(x, y, x_control, loss_function, EPS, cons_params)
+#
+#
+#
+#         train_score, test_score, cov_all_train, cov_all_test, s_attr_to_fp_fn_train, s_attr_to_fp_fn_test = fdm.get_clf_stats(w, x_train, y_train, x_control_train, x_test, y_test, x_control_test, sensitive_attrs)
+#         disp_test = np.abs(s_attr_to_fp_fn_test[sensible_name][0]["fpr"] - s_attr_to_fp_fn_test[sensible_name][0]["fpr"])
+#         disp_train = np.abs(s_attr_to_fp_fn_train[sensible_name][0]["fpr"] - s_attr_to_fp_fn_train[sensible_name][0]["fpr"])
+#
+#
+#         # accuracy and FPR are for the test because we need of for plotting
+#         return disp_test, disp_train, test_score, train_score
+#
+#
+#     disp_test, disp_train, test_score, train_score  = _train_test_classifier()
+#     res = dict()
+#     res["disp_train"] = disp_train
+#     res["disp_test"] = disp_test
+#     res["error_train"] = 1-train_score
+#     res["error_test"] = 1-test_score
+#
+#     return res
+
+# def get_eta(data):
+#     '''
+#     Calculate Pr[Y=1|A=0] and Pr[Y=1|A=1] in training set.
+#     '''
+#     dataY, dataA = data[1], data[2]
+#     c_a_0, c_a_1, c_01, c_11 = 0, 0, 0, 0
+#
+#     for y, a in zip(dataY, dataA):
+#         if a == 0:
+#             c_a_0 += 1
+#             if y == 1:
+#                 c_01 += 1
+#         else:
+#             c_a_1 += 1
+#             if y == 1:
+#                 c_11 += 1
+#     p_01 = c_01 / c_a_0
+#     p_11 = c_11 / c_a_1
+#     # print('p_01:', p_01, 'p_11:', p_11)
+#     return p_01, p_11
+#
+# def est_p(p_01_cor, p_11_cor, rho_est):
+#     '''
+#     estimate p_01 and p_11 using p_01_cor and rho_est
+#     '''
+#
+#     rho_a_plus_est, rho_a_minus_est = rho_est
+#     p_01_est = (p_01_cor - rho_a_minus_est)/(1 - rho_a_plus_est - rho_a_minus_est)
+#     p_11_est = (p_11_cor - rho_a_minus_est)/(1 - rho_a_plus_est - rho_a_minus_est)
+#
+#     return p_01_est, p_11_est
+
+
+  # rho_a_plus, rho_a_minus = rho
+  #
+  # pi_a_corr = np.sum([1.0 if a > 0 and y > 0 else 0.0 for a, y in zip(cor_dataA, dataY)])/ np.sum([1.0 if y > 0 else 0.0 for y in dataY])
+  #
+  # pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
+  #
+  # alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
+  # beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
+  # print('alpha_a', alpha_a, beta_a)
+  #
+  # p_01, p_11 = get_eta(data_nocor)
+  #
+  #
+  # pi_a_corr = np.mean([1.0 if a > 0 else 0.0 for a in cor_dataA])
+  # pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
+  # alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
+  # beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
+  #
+  # alpha_a_p = alpha_a*p_01 / ((1-alpha_a)*p_11 + alpha_a*p_01)
+  # beta_a_p = beta_a*p_11 / ((1-beta_a)*p_01 + beta_a*p_11)
+  # print('alpha_a_p', alpha_a_p, beta_a_p)
