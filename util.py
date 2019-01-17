@@ -301,7 +301,7 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
         sensible_feature = 9
 
         # lsq does not work for law
-        learner_name == 'SVM'
+        learner_name = 'SVM'
     else:
         datamat = load_compas(frac)
         sensible_name = 'race'

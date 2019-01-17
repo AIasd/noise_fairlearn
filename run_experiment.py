@@ -35,12 +35,16 @@ args = parser.parse_args()
 dataset = args.dataset
 rho = [args.rho_plus, args.rho_minus]
 frac = args.frac
+learner_name = None
 if dataset == 'adult' or dataset == 'adultr':
     eps_list = [0.001 * i for i in range(1, 10)]
+    learner_name = 'lsq'
 elif dataset == 'compas':
     eps_list = [0.02 * i for i in range(1, 10)]
+    learner_name = 'lsq'
 elif dataset == 'law':
     eps_list = [0.02 * i for i in range(1, 10)]
+    learner_name = 'SVM'
 criteria = args.criteria
 classifier = args.classifier
 trials = args.trials
@@ -49,7 +53,7 @@ filename = log_dir+'all_data_'+dataset+','+str(rho[0])+','+str(rho[1])+','+str(f
            +','+classifier+','+str(trials)+','+str(include_sensible)+'.pickle'
 verbose = args.verbose
 
-all_data = experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, verbose)
+all_data = experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, learner_name, verbose)
 
 if args.plot_result:
     plot(filename)
