@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from sklearn import svm
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import GridSearchCV
+from sklearn.exceptions import NotFittedError
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
@@ -31,7 +32,7 @@ from load_data import load_adult, load_compas, load_law
 from measures import fair_measure
 
 import seaborn as sns
-sns.set(font_scale = 1.25)
+sns.set(font_scale = 1.5)
 
 sys.path.insert(0, 'fairlearn/')
 import classred as red
@@ -62,11 +63,27 @@ class LeastSquaresLearner:
         pred = X.dot(self.weights)
         return 1*(pred > 0.5)
 
+
+class SVC_u:
+    def __init__(self):
+        self.clf = SVC(gamma=2, C=1, probability=True, random_state=0)
+
+    def fit(self, X, Y, W):
+        try:
+            self.clf.fit(X.values, Y.values)
+        except ValueError:
+            pass
+
+    def predict(self, X):
+        try:
+            return pd.Series(self.clf.predict(X.values))
+        except NotFittedError:
+            return pd.Series(np.zeros(X.values.shape[0]))
+
 SEED = 1122334455
 seed(SEED) # set the random seed so that the random permutations can be reproduced again
 np.random.seed(SEED)
 
-learner = LeastSquaresLearner()
 
 keys = ["disp_train", "disp_test", "error_train", "error_test"]
 
@@ -78,6 +95,7 @@ def change_format(dataset_train, dataset_test, sensible_feature, include_sensibl
     '''
     Change data format into that needed for Agarwal classifier. More preprocessing will be needed if Zafar's classifier gets used.
     '''
+
 
     d_train = dict()
     d_test = dict()
@@ -96,6 +114,7 @@ def change_format(dataset_train, dataset_test, sensible_feature, include_sensibl
     dataA[dataA<=0] = 0
 
 
+
     dataX_test = pd.DataFrame(d_test)
     dataY_test = pd.Series(dataset_test.target)
 
@@ -112,13 +131,17 @@ def permute_and_split(datamat, permute=True, train_ratio=0.8):
     '''
     Permute and split dataset into training and testing.
     '''
+
     if permute:
         datamat = np.random.permutation(datamat)
+
 
     cutoff = int(np.floor(len(datamat)*train_ratio))
 
     dataset_train = namedtuple('_', 'data, target')(datamat[:cutoff, :-1], datamat[:cutoff, -1])
     dataset_test = namedtuple('_', 'data, target')(datamat[cutoff:, :-1], datamat[cutoff:, -1])
+
+
 
     return dataset_train, dataset_test
 
@@ -214,34 +237,37 @@ def denoiseA(data_cor, rho):
 
     lnl2 = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
     noise_matrix = np.array([[1-rho_a_plus, rho_a_plus],[rho_a_minus, 1-rho_a_minus]])
+    # noise_matrix = np.array([[1-rho_a_plus, rho_a_minus],[rho_a_plus, 1-rho_a_minus]])
     lnl2.fit(X = dataX.values, s = cor_dataA.values, noise_matrix=noise_matrix)
 
     denoised_dataA = pd.Series(lnl2.predict(dataX.values))
     data_denoised = copy.deepcopy(data_cor)
     data_denoised[2] = denoised_dataA
 
+    print('after denoised:', np.sum(denoised_dataA==0), np.sum(denoised_dataA==1))
+
     # Check recovery accuracy
     auc1 = np.mean(dataA.values==cor_dataA.values)
     auc2 = np.mean(dataA.values==denoised_dataA.values)
-    print(dataA.values, denoised_dataA.values)
+
     print('auc:', auc1, auc2)
     print(lnl2.noise_matrix, rho_a_plus, rho_a_minus)
 
 
-    lnl = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
-    lnl.fit(X = dataX.values, s = cor_dataA.values)
-
-    rho_a_plus_est = lnl.noise_matrix[0][1]
-    rho_a_minus_est = lnl.noise_matrix[1][0]
-    rho_est = [rho_a_plus_est, rho_a_minus_est]
-
-    print(lnl.noise_matrix, rho_a_plus_est, rho_a_minus_est)
-
-
-    return data_denoised, rho_est
+    # lnl = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
+    # lnl.fit(X = dataX.values, s = cor_dataA.values)
+    #
+    # rho_a_plus_est = lnl.noise_matrix[0][1]
+    # rho_a_minus_est = lnl.noise_matrix[1][0]
+    # rho_est = [rho_a_plus_est, rho_a_minus_est]
+    #
+    # print(lnl.noise_matrix, rho_a_plus_est, rho_a_minus_est)
 
 
-def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, verbose=False):
+    return data_denoised
+
+
+def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, learner_name='lsq', verbose=False):
     '''
     dataset: one of ['compas', 'adult', 'adultr']
     rho: [a, b] where a, b in interval [0,0.5]
@@ -254,10 +280,12 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     include_sensible: boolean. If to include sensitive attribute as a feature for optimizing the oroginal loss. Note that even
                       if this is set to False, sensitive attribute will still be used for constraint(s).
     filename: the file name to store the log of experiment(s).
+    learner_name: ['lsq', 'SVM']
     verbose: boolean. If print out info at each run.
     '''
     sensible_name = None
     sensible_feature = None
+    learner = None
 
     if dataset == 'adultr':
         datamat = load_adult(frac)
@@ -269,24 +297,35 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
         sensible_feature = 9
     elif dataset == 'law':
         datamat = load_law(frac)
-        sensible_name = 'race'
+        sensible_name = 'racetxt'
         sensible_feature = 9
+
+        # lsq does not work for law
+        learner_name == 'SVM'
     else:
         datamat = load_compas(frac)
         sensible_name = 'race'
         sensible_feature = 4
+
+    if learner_name == 'SVM':
+        learner = SVC_u()
+    else:
+        learner = LeastSquaresLearner()
+
+    print('learner_name', learner_name)
+
 
     if criteria == 'EO':
         tests = [{"cons_class": moments.EO, "eps": eps} for eps in eps_list]
     else:
         tests = [{"cons_class": moments.DP, "eps": eps} for eps in eps_list]
 
-    all_data = _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, criteria, classifier, include_sensible, verbose)
+    all_data = _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, criteria, classifier, include_sensible, learner, verbose)
     save_all_data(filename, all_data, eps_list)
 
     return all_data
 
-def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, creteria, classifier, include_sensible, verbose):
+def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, creteria, classifier, include_sensible, learner, verbose):
     n = 4
     all_data = [{k:[[] for _ in range(trials)] for k in keys} for _ in range(n)]
 
@@ -299,7 +338,8 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
 
         dataY = data_nocor[1]
         dataA = data_nocor[2]
-        cor_dataA = copy.deepcopy(dataA)
+
+        cor_dataA = dataA.copy()
         data_cor = copy.deepcopy(data_nocor)
 
         corrupt(cor_dataA, data_nocor[1], rho, creteria)
@@ -310,14 +350,19 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         # p_01, p_11 = get_eta(data_nocor)
         # p_01_cor, p_11_cor = get_eta(data_cor)
 
-        data_denoised, rho_est = denoiseA(data_cor, rho)
+        data_denoised = denoiseA(data_cor, rho)
 
         # p_01_est, p_11_est = est_p(p_01_cor, p_11_cor, rho_est)
 
 
         alpha_a, beta_a = estimate_alpha_beta(cor_dataA, dataY, rho, creteria)
-        alpha_a_est, beta_a_est = estimate_alpha_beta(cor_dataA, dataY, rho_est, creteria)
+        # alpha_a_est, beta_a_est = estimate_alpha_beta(cor_dataA, dataY, rho_est, creteria)
 
+        # print('data_cor', np.mean(data_cor[1].values), np.mean(data_cor[2].values))
+        #
+        # print('data_nocor', np.mean(data_nocor[1].values), np.mean(data_nocor[2].values))
+        #
+        # print('data_denoised', np.mean(data_denoised[1].values), np.mean(data_denoised[2].values))
 
         for test_0 in tests:
             eps_0 = test_0['eps']
@@ -395,7 +440,7 @@ def run_test_Agarwal(test, data, sensible_name, learner, creteria):
     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
 
     res_tuple = red.expgrad(dataX, dataA, dataY, learner,
-                            cons=test["cons_class"](), eps=test["eps"])
+                            cons=test["cons_class"](), eps=test["eps"], debug=False)
 
     res = res_tuple._asdict()
     Q = res["best_classifier"]
@@ -403,8 +448,12 @@ def run_test_Agarwal(test, data, sensible_name, learner, creteria):
     def _get_stats(clf, dataX, dataA, dataY):
         pred = clf(dataX)
         disp = fair_measure(pred, dataA, dataY, creteria)
-
+        # print('dataX', dataX.values.shape, dataX.values[3, :])
+        # print('pred', pred.values[:20])
+        # print('dataY', dataY.values[:20])
+        # print(np.mean(dataY.values), np.mean(pred))
         error = np.mean(np.abs(dataY.values-pred.values))
+        # print('disp, error', disp, error)
         return disp, error
 
     res["disp_train"], res["error_train"] = _get_stats(Q, dataX_train, dataA_train, dataY_train)
@@ -535,7 +584,7 @@ def restore_all_data(filename):
     return all_data, eps_list
 
 
-def plot(filename, ref_line=[True, True, False, False], mode='four', save=False):
+def plot(filename, ref_end=0.2, ref_line=[False, False, False, False], mode='four', save=False):
     y_label = 'DDP'
 
     p_eo = re.compile('EO')
@@ -547,14 +596,18 @@ def plot(filename, ref_line=[True, True, False, False], mode='four', save=False)
     data = summarize_stats(all_data)
 
     keys = ["disp_train", "disp_test", "error_train", "error_test"]
-    xlabels = ['tau' for _ in range(4)]
-    ylabels = [y_label, y_label, 'error rate', 'error rate']
+    xlabels = ['$\\tau$' for _ in range(4)]
+    ylabels = [y_label, y_label, 'Error%', 'Error%']
+    leg_pos_list = ['upper left', 'upper left', 'lower left', 'lower left']
 
-    for k, xl, yl, ref in zip(keys, xlabels, ylabels, ref_line):
-        _plot(eps_list, data, k, xl, yl, filename, ref, mode, save)
+    for k, xl, yl, leg_pos, ref in zip(keys, xlabels, ylabels, leg_pos_list , ref_line):
+        title_end = ''
+        if 'train' in k:
+            title_end = '(training)'
+        _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, mode, save, title_end)
 
 
-def _plot(eps_list, data, k, xl, yl, filename, ref, mode, save):
+def _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, mode, save, title_end):
     '''
     Plot four graphs. Internal routine for plot
     '''
@@ -567,27 +620,44 @@ def _plot(eps_list, data, k, xl, yl, filename, ref, mode, save):
     for stat, err, label in zip(curves_mean, curves_std, labels):
         if mode == 'three':
             if label != 'denoise':
-                ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
+                ax.errorbar(eps_list, stat[k], yerr=err[k], label=label.replace('_', ' '))
         else:
-            ax.errorbar(eps_list, stat[k], yerr=err[k], label=k+','+label)
+            ax.errorbar(eps_list, stat[k], yerr=err[k], label=label.replace('_', ' '))
     if ref:
-        lims = [
-            np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
-            np.max([ax.get_xlim(), ax.get_ylim()])   # max of both axes
-        ]
-        lims2 = copy.deepcopy(lims)
-        # lims[1] /= 2
-        ax.plot(lims, lims2, 'k-', alpha=0.75, zorder=0)
+        # lims = [
+        #     np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
+        #     np.max([ax.get_xlim(), ax.get_ylim()])   # max of both axes
+        # ]
+        # lims2 = copy.deepcopy(lims)
+        lims = [0, ref_end]
+        lims2 = [0, ref_end]
 
-    title_content = filename
+        # lims[1] /= 2
+        ax.plot(lims, lims2, 'k-', alpha=0.75, zorder=0, color='grey', linestyle='dashed')
+
+    title_content = None
     try:
-        p = re.compile('all\_data\_(.*)\.pickle')
-        title_content = p.search(filename).group(1)
+        p0 = re.compile('all\_data\_(.*)\.pickle')
+        save_file_content = p0.search(filename).group(1)
+
+        p = re.compile('all\_data\_([a-zA-Z]+),([0-9\.]+),([0-9\.]+),[0-9\.]+,([A-Z]{2}),[a-zA-Z]+,[0-9]+,[a-zA-Z]+\.pickle')
+        res = p.search(filename)
+        dataset, rho_a_plus, rho_a_minus, creteria = res.group(1), res.group(2), res.group(3), res.group(4)
+
+        if dataset == 'law':
+            dataset = 'Law'
+        elif dataset == 'adult':
+            dataset = 'adult'
+        elif dataset == 'compas':
+            dataset = 'COMPAS'
+
+        title_content = dataset+' '+creteria+', '+'$\\rho^+=$'+rho_a_plus+', $\\rho^-=$'+rho_a_minus+title_end
+
     except TypeError:
         pass
 
-    ax.legend(loc='upper left', framealpha=0.1)
-    ax.set_title('epsilon VS '+k+'_'+title_content)
+    ax.legend(loc=leg_pos, framealpha=0.1)
+    ax.set_title(title_content)
     ax.set_xlabel(xl)
     ax.set_ylabel(yl)
     plt.show()
@@ -597,7 +667,7 @@ def _plot(eps_list, data, k, xl, yl, filename, ref, mode, save):
         os.mkdir(save_dir)
 
     if save:
-        fig.savefig(save_dir+k+'_'+title_content+'.pdf')
+        fig.savefig(save_dir+k+'_'+save_file_content+'.pdf', bbox_inches='tight')
 
 
 

@@ -19,7 +19,7 @@ import sklearn.preprocessing as preprocessing
 from sklearn.preprocessing import StandardScaler
 
 import urllib.request as url
-from collections import defaultdict
+
 from random import seed, shuffle
 import os
 
@@ -45,18 +45,130 @@ def check_data_file(fname, addr):
     else:
         print("File found in current directory..")
 
-def load_law(frac=1):
+def load_german(frac=1, scaler=True):
     '''
     ['decile1b', 'decile3', 'lsat', 'ugpa', 'zfygpa', 'zgpa', 'fulltime',
       'fam_inc', 'male', 'pass_bar', 'tier', 'racetxt']
     'racetxt' can have values {'Hispanic', 'American Indian / Alaskan Native', 'Black', 'White', 'Other', 'Asian'}
     '''
     LAW_FILE = 'datasets/law_data_clean.csv'
-    names = ['decile1b', 'decile3', 'lsat', 'ugpa', 'zfygpa', 'zgpa', 'fulltime', 'fam_inc', 'male', 'pass_bar', 'tier', 'racetxt']
-    data = pd.read_csv(LAW_FILE, names=names)
+    # names = ['decile1b', 'decile3', 'lsat', 'ugpa', 'zfygpa', 'zgpa', 'fulltime', 'fam_inc', 'male', 'pass_bar', 'tier', 'racetxt']
+    data = pd.read_csv(LAW_FILE)
+
+    data = data.loc[data['racetxt'].isin(['White', 'Black'])]
+    # Here we apply discretisation on column marital_status
+    # data.replace(['Hispanic', 'American Indian / Alaskan Native',
+    #               'Black', 'Other', 'Asian'],
+    #              ['Minority', 'Minority', 'Minority', 'Minority',
+    #               'Minority'], inplace=True)
 
 
-    return data
+    # categorical fields
+    category_col = ['racetxt']
+    for col in category_col:
+        b, c = np.unique(data[col], return_inverse=True)
+        data[col] = c
+    datamat = data.values
+
+    # datamat[:, 9], datamat[:, 11] = datamat[:, 11], datamat[:, 9]
+
+    temp = np.copy(datamat[:, 11])
+    datamat[:, 11] = datamat[:, 9]
+    datamat[:, 9] = temp
+
+
+
+
+    # datamat = datamat[datamat[:,11].argsort()]
+    # datamat = datamat[:int(len(datamat)/7)]
+
+
+    datamat = np.random.permutation(datamat)
+    A = np.copy(datamat[:, 9])
+
+
+    target = datamat[:, -1]
+    datamat = datamat[:, :-1]
+
+
+    if scaler:
+        scaler = StandardScaler()
+        scaler.fit(datamat)
+        datamat = scaler.transform(datamat)
+
+    datamat[:, 9] = A
+
+    datamat = np.concatenate([datamat, target[:, np.newaxis]], axis=1)
+
+    print('The dataset is loaded...')
+
+    datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
+
+
+    return datamat
+
+
+def load_law(frac=1, scaler=True):
+    '''
+    ['decile1b', 'decile3', 'lsat', 'ugpa', 'zfygpa', 'zgpa', 'fulltime',
+      'fam_inc', 'male', 'pass_bar', 'tier', 'racetxt']
+    'racetxt' can have values {'Hispanic', 'American Indian / Alaskan Native', 'Black', 'White', 'Other', 'Asian'}
+    '''
+    LAW_FILE = 'datasets/law_data_clean.csv'
+    # names = ['decile1b', 'decile3', 'lsat', 'ugpa', 'zfygpa', 'zgpa', 'fulltime', 'fam_inc', 'male', 'pass_bar', 'tier', 'racetxt']
+    data = pd.read_csv(LAW_FILE)
+
+    data = data.loc[data['racetxt'].isin(['White', 'Black'])]
+    # Here we apply discretisation on column marital_status
+    # data.replace(['Hispanic', 'American Indian / Alaskan Native',
+    #               'Black', 'Other', 'Asian'],
+    #              ['Minority', 'Minority', 'Minority', 'Minority',
+    #               'Minority'], inplace=True)
+
+
+    # categorical fields
+    category_col = ['racetxt']
+    for col in category_col:
+        b, c = np.unique(data[col], return_inverse=True)
+        data[col] = c
+    datamat = data.values
+
+    # datamat[:, 9], datamat[:, 11] = datamat[:, 11], datamat[:, 9]
+
+    temp = np.copy(datamat[:, 11])
+    datamat[:, 11] = datamat[:, 9]
+    datamat[:, 9] = temp
+
+
+
+
+    # datamat = datamat[datamat[:,11].argsort()]
+    # datamat = datamat[:int(len(datamat)/7)]
+
+
+    datamat = np.random.permutation(datamat)
+    A = np.copy(datamat[:, 9])
+
+
+    target = datamat[:, -1]
+    datamat = datamat[:, :-1]
+
+
+    if scaler:
+        scaler = StandardScaler()
+        scaler.fit(datamat)
+        datamat = scaler.transform(datamat)
+
+    datamat[:, 9] = A
+
+    datamat = np.concatenate([datamat, target[:, np.newaxis]], axis=1)
+
+    print('The dataset is loaded...')
+
+    datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
+
+
+    return datamat
 
 
 
@@ -154,6 +266,8 @@ def load_adult(frac=1, scaler=True):
     print('The dataset is loaded...')
     datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
 
+    print(datamat[0])
+
     return datamat
 
 
@@ -173,7 +287,7 @@ def load_compas(frac=1):
     FEATURES_CLASSIFICATION = ["age_cat", "race", "sex", "priors_count", "c_charge_degree"] #features to be used for classification
     CONT_VARIABLES = ["priors_count"] # continuous features, will need to be handled separately from categorical features, categorical features will be encoded using one-hot
     CLASS_FEATURE = "two_year_recid" # the decision variable
-    SENSITIVE_ATTRS = ["race"]
+
 
     dir = 'datasets'
     if not os.path.isdir(dir):
@@ -193,6 +307,7 @@ def load_compas(frac=1):
     data = df.to_dict('list')
     for k in data.keys():
         data[k] = np.array(data[k])
+
 
 
     """ Filtering the data """
@@ -234,7 +349,7 @@ def load_compas(frac=1):
 
 
     X = np.array([]).reshape(len(y), 0) # empty array with num rows same as num examples, will hstack the features to it
-    x_control = defaultdict(list)
+
 
     feature_names = []
     for attr in FEATURES_CLASSIFICATION:
@@ -249,9 +364,7 @@ def load_compas(frac=1):
             lb.fit(vals)
             vals = lb.transform(vals)
 
-        # add to sensitive features dict
-        if attr in SENSITIVE_ATTRS:
-            x_control[attr] = vals
+
 
 
         # add to learnable features
@@ -267,19 +380,12 @@ def load_compas(frac=1):
                     feature_names.append(attr + "_" + str(k))
 
 
-    # convert the sensitive feature to 1-d array
-    x_control = dict(x_control)
-    for k in x_control.keys():
-        assert(x_control[k].shape[1] == 1) # make sure that the sensitive feature is binary after one hot encoding
-        x_control[k] = np.array(x_control[k]).flatten()
+
     """permute the data randomly"""
     perm = list(range(X.shape[0]))
     shuffle(perm)
     X = np.array([X[i] for i in perm])
     y = np.array([y[i] for i in perm])
-    print(x_control)
-    for k in x_control.keys():
-        x_control[k] = np.array([x_control[k][i] for i in perm])
 
 
     X = add_intercept(X)
@@ -293,7 +399,11 @@ def load_compas(frac=1):
     # Take fraction
     cutoff = int(np.floor(len(datamat)*frac))
     datamat = datamat[:cutoff, :]
-    for k in x_control.keys():
-        x_control[k] = x_control[k][:cutoff]
+    import copy
+    ref = datamat[:, 4]
+    tmp = copy.deepcopy(datamat[:, 4])
+
+    ref[tmp==0.0] = 1.0
+    ref[tmp==1.0] = 0.0
 
     return datamat
