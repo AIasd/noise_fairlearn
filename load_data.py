@@ -47,65 +47,97 @@ def check_data_file(fname, addr):
 
 def load_german(frac=1, scaler=True):
     '''
-    ['decile1b', 'decile3', 'lsat', 'ugpa', 'zfygpa', 'zgpa', 'fulltime',
-      'fam_inc', 'male', 'pass_bar', 'tier', 'racetxt']
-    'racetxt' can have values {'Hispanic', 'American Indian / Alaskan Native', 'Black', 'White', 'Other', 'Asian'}
+    22 features and 1 target
+    Job                            1000 non-null int64
+    Credit amount                  1000 non-null int64
+    Duration                       1000 non-null int64
+    Purpose_car                    1000 non-null uint8
+    Purpose_domestic appliances    1000 non-null uint8
+    Purpose_education              1000 non-null uint8
+    Purpose_furniture/equipment    1000 non-null uint8
+    Purpose_radio/TV               1000 non-null uint8
+    Purpose_repairs                1000 non-null uint8
+    Purpose_vacation/others        1000 non-null uint8
+    Sex_male                       1000 non-null uint8
+    Housing_own                    1000 non-null uint8
+    Housing_rent                   1000 non-null uint8
+    Savings_moderate               1000 non-null uint8
+    Savings_no_inf                 1000 non-null uint8
+    Savings_quite rich             1000 non-null uint8
+    Savings_rich                   1000 non-null uint8
+    Check_moderate                 1000 non-null uint8
+    Check_no_inf                   1000 non-null uint8
+    Check_rich                     1000 non-null uint8
+    Age_cat_Old                    1000 non-null uint8
+    Foreign                        1000 non-null uint8
+    Risk_bad                       1000 non-null uint8
     '''
-    LAW_FILE = 'datasets/law_data_clean.csv'
-    # names = ['decile1b', 'decile3', 'lsat', 'ugpa', 'zfygpa', 'zgpa', 'fulltime', 'fam_inc', 'male', 'pass_bar', 'tier', 'racetxt']
-    data = pd.read_csv(LAW_FILE)
-
-    data = data.loc[data['racetxt'].isin(['White', 'Black'])]
-    # Here we apply discretisation on column marital_status
-    # data.replace(['Hispanic', 'American Indian / Alaskan Native',
-    #               'Black', 'Other', 'Asian'],
-    #              ['Minority', 'Minority', 'Minority', 'Minority',
-    #               'Minority'], inplace=True)
 
 
-    # categorical fields
-    category_col = ['racetxt']
-    for col in category_col:
-        b, c = np.unique(data[col], return_inverse=True)
-        data[col] = c
-    datamat = data.values
-
-    # datamat[:, 9], datamat[:, 11] = datamat[:, 11], datamat[:, 9]
-
-    temp = np.copy(datamat[:, 11])
-    datamat[:, 11] = datamat[:, 9]
-    datamat[:, 9] = temp
+    df_credit = pd.read_csv("datasets/new_german_credit_data.csv", index_col=0)
 
 
+    #Let's look the Credit Amount column
+    interval = (18, 25, 120)
+
+    cats = ['Young', 'Old']
+    df_credit["Age_cat"] = pd.cut(df_credit.Age, interval, labels=cats)
 
 
-    # datamat = datamat[datamat[:,11].argsort()]
-    # datamat = datamat[:int(len(datamat)/7)]
+    df_credit['Saving accounts'] = df_credit['Saving accounts'].fillna('no_inf')
+    df_credit['Checking account'] = df_credit['Checking account'].fillna('no_inf')
+
+    #Purpose to Dummies Variable
+    df_credit = df_credit.merge(pd.get_dummies(df_credit.Purpose, drop_first=True, prefix='Purpose'), left_index=True, right_index=True)
+    #Sex feature in dummies
+    df_credit = df_credit.merge(pd.get_dummies(df_credit.Sex, drop_first=True, prefix='Sex'), left_index=True, right_index=True)
+    # Housing get dummies
+    df_credit = df_credit.merge(pd.get_dummies(df_credit.Housing, drop_first=True, prefix='Housing'), left_index=True, right_index=True)
+    # Housing get Saving Accounts
+    df_credit = df_credit.merge(pd.get_dummies(df_credit["Saving accounts"], drop_first=True, prefix='Savings'), left_index=True, right_index=True)
+    # Housing get Risk
+    df_credit = df_credit.merge(pd.get_dummies(df_credit.Risk, prefix='Risk'), left_index=True, right_index=True)
+    # Housing get Checking Account
+    df_credit = df_credit.merge(pd.get_dummies(df_credit["Checking account"], drop_first=True, prefix='Check'), left_index=True, right_index=True)
+    # Housing get Age categorical
+    df_credit = df_credit.merge(pd.get_dummies(df_credit["Age_cat"], drop_first=True, prefix='Age_cat'), left_index=True, right_index=True)
 
 
-    datamat = np.random.permutation(datamat)
-    A = np.copy(datamat[:, 9])
+    #Excluding the missing columns
+    del df_credit["Age"]
+    del df_credit["Saving accounts"]
+    del df_credit["Checking account"]
+    del df_credit["Purpose"]
+    del df_credit["Sex"]
+    del df_credit["Housing"]
+    del df_credit["Age_cat"]
+    del df_credit["Risk"]
+    del df_credit['Risk_good']
 
 
-    target = datamat[:, -1]
-    datamat = datamat[:, :-1]
+    df_credit['Credit amount'] = np.log(df_credit['Credit amount'])
 
+
+
+    datamat = df_credit.drop('Risk_bad', 1).values
+    target = df_credit["Risk_bad"].values
+    A = np.copy(datamat[:, 11])
 
     if scaler:
         scaler = StandardScaler()
         scaler.fit(datamat)
         datamat = scaler.transform(datamat)
 
-    datamat[:, 9] = A
+    datamat[:, 11] = A
+
 
     datamat = np.concatenate([datamat, target[:, np.newaxis]], axis=1)
-
-    print('The dataset is loaded...')
-
+    datamat = np.random.permutation(datamat)
     datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
 
-
     return datamat
+
+
 
 
 def load_law(frac=1, scaler=True):

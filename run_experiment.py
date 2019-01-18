@@ -45,6 +45,9 @@ elif dataset == 'compas':
 elif dataset == 'law':
     eps_list = [0.02 * i for i in range(1, 10)]
     learner_name = 'SVM'
+elif dataset == 'german':
+    eps_list = [0.01 * i for i in range(1, 10)]
+    learner_name = 'lsq'
 criteria = args.criteria
 classifier = args.classifier
 trials = args.trials

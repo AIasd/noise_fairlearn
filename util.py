@@ -28,7 +28,7 @@ import os
 from collections import namedtuple
 from random import seed
 
-from load_data import load_adult, load_compas, load_law
+from load_data import load_adult, load_compas, load_law, load_german
 from measures import fair_measure
 
 import seaborn as sns
@@ -302,6 +302,10 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
 
         # lsq does not work for law
         learner_name = 'SVM'
+    elif dataset == 'german':
+        datamat = load_german(frac)
+        sensible_name = 'Foreign'
+        sensible_feature = 21
     else:
         datamat = load_compas(frac)
         sensible_name = 'race'
@@ -367,7 +371,6 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         for test_0 in tests:
             eps_0 = test_0['eps']
             test = copy.deepcopy(test_0)
-
 
             res_cor = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
