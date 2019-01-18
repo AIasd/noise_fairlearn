@@ -457,6 +457,7 @@ def run_test_Agarwal(test, data, sensible_name, learner, creteria):
         # print('dataY', dataY.values[:20])
         # print(np.mean(dataY.values), np.mean(pred))
         error = np.mean(np.abs(dataY.values-pred.values))
+        # print(dataY.values[:10], pred.values[:10])
         # print('disp, error', disp, error)
         return disp, error
 

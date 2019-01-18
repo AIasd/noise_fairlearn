@@ -43,7 +43,7 @@ if dataset == 'adult' or dataset == 'adultr':
 elif dataset == 'compas':
     eps_list = [0.02 * i for i in range(1, 10)]
 elif dataset == 'law':
-    eps_list = [0.02 * i for i in range(1, 10)]
+    eps_list = [0.035 * i for i in range(1, 10)]
     learner_name = 'LR' # Mandatory
 elif dataset == 'german':
     eps_list = [0.01 * i for i in range(1, 10)]
