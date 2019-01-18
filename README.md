@@ -16,6 +16,7 @@ This repo implements a general interface for noisy fair binary classification. I
 ### datasets:
 
  * UCI Adult
+ * UCI German
  * COMPAS
 
 ## Usage
