@@ -26,6 +26,8 @@ parser.add_argument('--trials', type=int, default=3, help='number of trials')
 
 parser.add_argument('--include-sensible', dest='include_sensible', action='store_true', help='include sensible as a training feature')
 
+parser.add_argument('--learner-name', dest='learner_name', type=str, default='lsq', help='Base learner for Agarwal\'s method.')
+
 parser.add_argument('--verbose', dest='verbose', action='store_true', help='print stats at each run')
 
 parser.add_argument('--plot-result', dest='plot_result', action='store_true', help='plot result')
@@ -35,19 +37,17 @@ args = parser.parse_args()
 dataset = args.dataset
 rho = [args.rho_plus, args.rho_minus]
 frac = args.frac
-learner_name = None
+learner_name = args.learner_name
 if dataset == 'adult' or dataset == 'adultr':
     eps_list = [0.001 * i for i in range(1, 10)]
-    learner_name = 'lsq'
 elif dataset == 'compas':
     eps_list = [0.02 * i for i in range(1, 10)]
-    learner_name = 'lsq'
 elif dataset == 'law':
     eps_list = [0.02 * i for i in range(1, 10)]
-    learner_name = 'LR'
+    learner_name = 'LR' # Mandatory
 elif dataset == 'german':
     eps_list = [0.01 * i for i in range(1, 10)]
-    learner_name = 'lsq'
+
 criteria = args.criteria
 classifier = args.classifier
 trials = args.trials
