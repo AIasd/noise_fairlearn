@@ -44,7 +44,7 @@ elif dataset == 'compas':
     learner_name = 'lsq'
 elif dataset == 'law':
     eps_list = [0.02 * i for i in range(1, 10)]
-    learner_name = 'SVM'
+    learner_name = 'LR'
 elif dataset == 'german':
     eps_list = [0.01 * i for i in range(1, 10)]
     learner_name = 'lsq'

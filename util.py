@@ -64,10 +64,9 @@ class LeastSquaresLearner:
         return 1*(pred > 0.5)
 
 
-class SVC_u:
+class LR:
     def __init__(self):
-        self.clf = SVC(gamma=2, C=1, probability=True, random_state=0)
-
+        self.clf = LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
     def fit(self, X, Y, W):
         try:
             self.clf.fit(X.values, Y.values)
@@ -79,6 +78,8 @@ class SVC_u:
             return pd.Series(self.clf.predict(X.values))
         except NotFittedError:
             return pd.Series(np.zeros(X.values.shape[0]))
+
+
 
 SEED = 1122334455
 seed(SEED) # set the random seed so that the random permutations can be reproduced again
@@ -280,7 +281,7 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     include_sensible: boolean. If to include sensitive attribute as a feature for optimizing the oroginal loss. Note that even
                       if this is set to False, sensitive attribute will still be used for constraint(s).
     filename: the file name to store the log of experiment(s).
-    learner_name: ['lsq', 'SVM']
+    learner_name: ['lsq', 'LR']
     verbose: boolean. If print out info at each run.
     '''
     sensible_name = None
@@ -301,7 +302,7 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
         sensible_feature = 9
 
         # lsq does not work for law
-        learner_name = 'SVM'
+        learner_name = 'LR'
     elif dataset == 'german':
         datamat = load_german(frac)
         sensible_name = 'Foreign'
@@ -311,8 +312,8 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
         sensible_name = 'race'
         sensible_feature = 4
 
-    if learner_name == 'SVM':
-        learner = SVC_u()
+    if learner_name == 'LR':
+        learner = LR()
     else:
         learner = LeastSquaresLearner()
 
