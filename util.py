@@ -66,7 +66,7 @@ class LeastSquaresLearner:
 
 class LR:
     def __init__(self):
-        self.clf = LogisticRegression()
+        self.clf = LogisticRegression(solver = 'lbfgs')
     def fit(self, X, Y, W):
         try:
             self.clf.fit(X.values, Y.values)
