@@ -80,6 +80,22 @@ class LR:
             return pd.Series(np.zeros(X.values.shape[0]))
 
 
+class SVM:
+    def __init__(self):
+        self.clf = SVC(kernel="linear", C=0.025, probability=True, random_state=0)
+    def fit(self, X, Y, W):
+        try:
+            self.clf.fit(X.values, Y.values)
+        except ValueError:
+            pass
+
+    def predict(self, X):
+        try:
+            return pd.Series(self.clf.predict(X.values))
+        except NotFittedError:
+            return pd.Series(np.zeros(X.values.shape[0]))
+
+
 
 SEED = 1122334455
 seed(SEED) # set the random seed so that the random permutations can be reproduced again
@@ -247,9 +263,15 @@ def denoiseA(data_cor, rho):
 
     print('after denoised:', np.sum(denoised_dataA==0), np.sum(denoised_dataA==1))
 
+    # lnl3 = SVC(gamma=2, C=1, probability=True, random_state=0)
+    #
+    # lnl3.fit(dataX.values, cor_dataA.values)
+    # pred_dataA = pd.Series(lnl3.predict(dataX.values))
+
     # Check recovery accuracy
     auc1 = np.mean(dataA.values==cor_dataA.values)
     auc2 = np.mean(dataA.values==denoised_dataA.values)
+    # auc3 = np.mean(dataA.values==pred_dataA.values)
 
     print('auc:', auc1, auc2)
     print(lnl2.noise_matrix, rho_a_plus, rho_a_minus)
@@ -281,7 +303,7 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     include_sensible: boolean. If to include sensitive attribute as a feature for optimizing the oroginal loss. Note that even
                       if this is set to False, sensitive attribute will still be used for constraint(s).
     filename: the file name to store the log of experiment(s).
-    learner_name: ['lsq', 'LR']
+    learner_name: ['lsq', 'LR', 'SVM']. SVM is very slow. lsq does not work for law school dataset.
     verbose: boolean. If print out info at each run.
     '''
     sensible_name = None
@@ -314,6 +336,8 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
 
     if learner_name == 'LR':
         learner = LR()
+    elif learner_name == 'SVM':
+        learner = SVM()
     else:
         learner = LeastSquaresLearner()
 
@@ -343,6 +367,14 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
 
         dataY = data_nocor[1]
         dataA = data_nocor[2]
+
+        # a0y1 = np.sum([1.0 if a==0 and y==1 else 0.0 for a,y in zip(dataA.values, dataY.values)])
+        # a0 = np.sum([1.0 if a==0 else 0.0 for a in dataA.values])
+        #
+        # a1y1 = np.sum([1.0 if a==1 and y==1 else 0.0 for a,y in zip(dataA.values, dataY.values)])
+        # a1 = np.sum([1.0 if a==1 else 0.0 for a in dataA.values])
+        # print('a=0,y=1:', a0y1 , 'a=0', a0, a0y1/a0)
+        # print('a=1,y=1:', a1y1 , 'a=1', a1, a1y1/a1)
 
         cor_dataA = dataA.copy()
         data_cor = copy.deepcopy(data_nocor)
@@ -451,6 +483,7 @@ def run_test_Agarwal(test, data, sensible_name, learner, creteria):
 
     def _get_stats(clf, dataX, dataA, dataY):
         pred = clf(dataX)
+        # print('accuracy', np.mean(pred.values==dataY.values))
         disp = fair_measure(pred, dataA, dataY, creteria)
         # print('dataX', dataX.values.shape, dataX.values[3, :])
         # print('pred', pred.values[:20])
@@ -621,11 +654,13 @@ def _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, mode, save
 
     fig, ax = plt.subplots()
 
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+
     # labels = ['cor', 'nocor', 'cor_scale']
-    for stat, err, label in zip(curves_mean, curves_std, labels):
+    for stat, err, label, color in zip(curves_mean, curves_std, labels, colors):
         if mode == 'three':
             if label != 'denoise':
-                ax.errorbar(eps_list, stat[k], yerr=err[k], label=label.replace('_', ' '))
+                ax.errorbar(eps_list, stat[k], yerr=err[k], label=label.replace('_', ' '), color=color)
         else:
             ax.errorbar(eps_list, stat[k], yerr=err[k], label=label.replace('_', ' '))
     if ref:
