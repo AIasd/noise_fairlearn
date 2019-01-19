@@ -66,7 +66,7 @@ class LeastSquaresLearner:
 
 class LR:
     def __init__(self):
-        self.clf = LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
+        self.clf = LogisticRegression()
     def fit(self, X, Y, W):
         try:
             self.clf.fit(X.values, Y.values)
@@ -302,20 +302,19 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     sensible_name = None
     sensible_feature = None
     learner = None
-
+    print(dataset)
     if dataset == 'adultr':
         datamat = load_adult(frac)
-        sensible_name = 'race'
-        sensible_feature = 8
-    if dataset == 'adult':
+        sensible_name = 'race_num'
+        sensible_feature = 3
+    elif dataset == 'adult':
         datamat = load_adult(frac)
-        sensible_name = 'gender'
-        sensible_feature = 9
+        sensible_name = 'sex_num'
+        sensible_feature = 4
     elif dataset == 'law':
         datamat = load_law(frac)
         sensible_name = 'racetxt'
         sensible_feature = 9
-
         # lsq does not work for law
         learner_name = 'LR'
     elif dataset == 'german':

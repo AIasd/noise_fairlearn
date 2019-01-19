@@ -29,21 +29,21 @@ seed(SEED) # set the random seed so that the random permutations can be reproduc
 np.random.seed(SEED)
 
 
-def check_data_file(fname, addr):
-    '''
-    The code will look for the data file in the present directory, if it is not found, it will download them from GitHub.
-    '''
-    print("Looking for file '%s' in the current directory..." % fname)
-
-    if not os.path.isfile(fname):
-        print("'%s' not found! Downloading from GitHub..." % fname)
-        response = url.urlopen(addr)
-        data = response.read()
-        with open(fname, "wb") as fileOut:
-            fileOut.write(data)
-        print("'%s' download and saved locally.." % fname)
-    else:
-        print("File found in current directory..")
+# def check_data_file(fname, addr):
+#     '''
+#     The code will look for the data file in the present directory, if it is not found, it will download them from GitHub.
+#     '''
+#     print("Looking for file '%s' in the current directory..." % fname)
+#
+#     if not os.path.isfile(fname):
+#         print("'%s' not found! Downloading from GitHub..." % fname)
+#         response = url.urlopen(addr)
+#         data = response.read()
+#         with open(fname, "wb") as fileOut:
+#             fileOut.write(data)
+#         print("'%s' download and saved locally.." % fname)
+#     else:
+#         print("File found in current directory..")
 
 def load_german(frac=1, scaler=True):
     '''
@@ -203,104 +203,154 @@ def load_law(frac=1, scaler=True):
     return datamat
 
 
-
 def load_adult(frac=1, scaler=True):
     '''
-    :param frac: the fraction of data to return
-    :param scaler: if True it applies a StandardScaler() (from sklearn.preprocessing) to the data.
-    :return: train and test data.
-
-    Features of the Adult dataset:
-    0. age: continuous.
-    1. workclass: Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, State-gov, Without-pay, Never-worked.
-    2. fnlwgt: continuous.
-    3. education: Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, Assoc-voc, 9th, 7th-8th, 12th,
-    Masters, 1st-4th, 10th, Doctorate, 5th-6th, Preschool.
-    4. education-num: continuous.
-    5. marital-status: Married-civ-spouse, Divorced, Never-married, Separated, Widowed,
-    Married-spouse-absent, Married-AF-spouse.
-    6. occupation: Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof-specialty,
-    Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv,
-    Protective-serv, Armed-Forces.
-    7. relationship: Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried.
-    8. race: White, Asian-Pac-Islander, Amer-Indian-Eskimo, Other, Black.
-    9. sex: Female, Male.
-    10. capital-gain: continuous.
-    11. capital-loss: continuous.
-    12. hours-per-week: continuous.
-    13. native-country: United-States, Cambodia, England, Puerto-Rico, Canada, Germany, Outlying-US(Guam-USVI-etc),
-    India, Japan, Greece, South, China, Cuba, Iran, Honduras, Philippines, Italy, Poland, Jamaica, Vietnam, Mexico,
-    Portugal, Ireland, France, Dominican-Republic, Laos, Ecuador, Taiwan, Haiti, Columbia, Hungary, Guatemala,
-    Nicaragua, Scotland, Thailand, Yugoslavia, El-Salvador, Trinadad&Tobago, Peru, Hong, Holand-Netherlands.
-    (14. label: <=50K, >50K)
+    ['workclass_num', 'education.num', 'marital_num', 'race_num', 'sex_num', 'rel_num', 'capital.gain', 'capital.loss']
     '''
-    dir = 'datasets'
-    if not os.path.isdir(dir):
-        os.mkdir(dir)
 
-    train_addr = 'https://github.com/jmikko/fair_ERM/blob/master/datasets/adult/adult.data'
-    test_addr = 'https://github.com/jmikko/fair_ERM/blob/master/datasets/adult/adult.test'
+    ADULT_TRAIN_FILE = 'datasets/adult.data'
+    ADULT_TEST_FILE = 'datasets/adult.test'
 
-    ADULT_TRAIN_FILE = dir+os.sep+'adult.data'
-    ADULT_TEST_FILE = dir+os.sep+'adult.test'
-
-    check_data_file(ADULT_TRAIN_FILE, train_addr)
-    check_data_file(ADULT_TEST_FILE, test_addr)
-
-    names=[
-        "Age", "workclass", "fnlwgt", "education", "education-num", "marital-status",
-        "occupation", "relationship", "race", "gender", "capital gain", "capital loss",
-        "hours per week", "native-country", "income"]
+    names = ['age', 'workclass', 'fnlwgt', 'education', 'education.num', 'marital.status', 'occupation', 'relationship',
+     'race', 'sex', 'capital.gain', 'capital.loss', 'hours.per.week', 'native.country', 'income']
 
     data = pd.read_csv(
-        ADULT_TRAIN_FILE,
-        names=names
-            )
+            ADULT_TRAIN_FILE,
+            names = names, skipinitialspace=True
+                )
 
     data_test = pd.read_csv(
-        ADULT_TEST_FILE,
-        names=names
-    )
+            ADULT_TEST_FILE,
+            names=names, skipinitialspace=True
+        )
+    # print(data_test.head())
     data = pd.concat([data, data_test])
-    # Considering the relative low portion of missing data, we discard rows with missing data
+    data = data[data["occupation"] != '?']
+    data = data[data["native.country"] != '?']
+    data = data[data["workclass"] != '?']
+    # raw_data = data[data.occupation != '?']
 
-    domanda = data["workclass"][4].values[1]
-    data = data[data["workclass"] != domanda]
-    data = data[data["occupation"] != domanda]
-    data = data[data["native-country"] != domanda]
 
-    # Here we apply discretisation on column marital_status
-    data.replace(['Divorced', 'Married-AF-spouse',
-                  'Married-civ-spouse', 'Married-spouse-absent',
-                  'Never-married', 'Separated', 'Widowed'],
-                 ['not married', 'married', 'married', 'married',
-                  'not married', 'not married', 'not married'], inplace=True)
 
-    # categorical fields
-    category_col = ['workclass', 'race', 'education', 'marital-status', 'occupation', 'relationship', 'gender', 'native-country', 'income']
-    for col in category_col:
-        b, c = np.unique(data[col], return_inverse=True)
-        data[col] = c
-    datamat = data.values
 
+    # print(data.values.shape, raw_data.values.shape)
+
+    # create numerical columns representing the categorical data
+    data['workclass_num'] = data.workclass.map({'Private':0, 'State-gov':1, 'Federal-gov':2, 'Self-emp-not-inc':3, 'Self-emp-inc':4, 'Local-gov':5, 'Without-pay':6})
+    data['over50K'] = np.where(data.income == '<=50K', 0, 1)
+    data['marital_num'] = data['marital.status'].map({'Widowed':0, 'Divorced':1, 'Separated':2, 'Never-married':3, 'Married-civ-spouse':4, 'Married-AF-spouse':4, 'Married-spouse-absent':5})
+    data['race_num'] = data.race.map({'White':0, 'Black':1, 'Asian-Pac-Islander':2, 'Amer-Indian-Eskimo':3, 'Other':4})
+    data['sex_num'] = np.where(data.sex == 'Female', 0, 1)
+    data['rel_num'] = data.relationship.map({'Not-in-family':0, 'Unmarried':0, 'Own-child':0, 'Other-relative':0, 'Husband':1, 'Wife':1})
+
+    X = data[['workclass_num', 'education.num', 'marital_num', 'race_num', 'sex_num', 'rel_num', 'capital.gain', 'capital.loss']]
+    y = data.over50K
+
+    datamat = np.concatenate([X, y[:, np.newaxis]], axis=1)
     datamat = np.random.permutation(datamat)
-
-    target = datamat[:, -1]
-    datamat = datamat[:, :-1]
-
-    if scaler:
-        scaler = StandardScaler()
-        scaler.fit(datamat)
-        datamat = scaler.transform(datamat)
-
-    datamat = np.concatenate([datamat, target[:, np.newaxis]], axis=1)
-
-    print('The dataset is loaded...')
     datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
 
-    print(datamat[0])
-
     return datamat
+
+
+
+# def load_adult(frac=1, scaler=True):
+#     '''
+#     :param frac: the fraction of data to return
+#     :param scaler: if True it applies a StandardScaler() (from sklearn.preprocessing) to the data.
+#     :return: train and test data.
+#
+#     Features of the Adult dataset:
+#     0. age: continuous.
+#     1. workclass: Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, State-gov, Without-pay, Never-worked.
+#     2. fnlwgt: continuous.
+#     3. education: Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, Assoc-voc, 9th, 7th-8th, 12th,
+#     Masters, 1st-4th, 10th, Doctorate, 5th-6th, Preschool.
+#     4. education-num: continuous.
+#     5. marital-status: Married-civ-spouse, Divorced, Never-married, Separated, Widowed,
+#     Married-spouse-absent, Married-AF-spouse.
+#     6. occupation: Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof-specialty,
+#     Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv,
+#     Protective-serv, Armed-Forces.
+#     7. relationship: Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried.
+#     8. race: White, Asian-Pac-Islander, Amer-Indian-Eskimo, Other, Black.
+#     9. sex: Female, Male.
+#     10. capital-gain: continuous.
+#     11. capital-loss: continuous.
+#     12. hours-per-week: continuous.
+#     13. native-country: United-States, Cambodia, England, Puerto-Rico, Canada, Germany, Outlying-US(Guam-USVI-etc),
+#     India, Japan, Greece, South, China, Cuba, Iran, Honduras, Philippines, Italy, Poland, Jamaica, Vietnam, Mexico,
+#     Portugal, Ireland, France, Dominican-Republic, Laos, Ecuador, Taiwan, Haiti, Columbia, Hungary, Guatemala,
+#     Nicaragua, Scotland, Thailand, Yugoslavia, El-Salvador, Trinadad&Tobago, Peru, Hong, Holand-Netherlands.
+#     (14. label: <=50K, >50K)
+#     '''
+#     dir = 'datasets'
+#     if not os.path.isdir(dir):
+#         os.mkdir(dir)
+#
+#     train_addr = 'https://github.com/jmikko/fair_ERM/blob/master/datasets/adult/adult.data'
+#     test_addr = 'https://github.com/jmikko/fair_ERM/blob/master/datasets/adult/adult.test'
+#
+#     ADULT_TRAIN_FILE = dir+os.sep+'adult.data'
+#     ADULT_TEST_FILE = dir+os.sep+'adult.test'
+#
+#     check_data_file(ADULT_TRAIN_FILE, train_addr)
+#     check_data_file(ADULT_TEST_FILE, test_addr)
+#
+#     names=[
+#         "Age", "workclass", "fnlwgt", "education", "education-num", "marital-status",
+#         "occupation", "relationship", "race", "gender", "capital gain", "capital loss",
+#         "hours per week", "native-country", "income"]
+#
+#     data = pd.read_csv(
+#         ADULT_TRAIN_FILE,
+#         names=names
+#             )
+#
+#     data_test = pd.read_csv(
+#         ADULT_TEST_FILE,
+#         names=names
+#     )
+#     data = pd.concat([data, data_test])
+#     # Considering the relative low portion of missing data, we discard rows with missing data
+#
+#     domanda = data["workclass"][4].values[1]
+#     data = data[data["workclass"] != domanda]
+#     data = data[data["occupation"] != domanda]
+#     data = data[data["native-country"] != domanda]
+#
+#     # Here we apply discretisation on column marital_status
+#     data.replace(['Divorced', 'Married-AF-spouse',
+#                   'Married-civ-spouse', 'Married-spouse-absent',
+#                   'Never-married', 'Separated', 'Widowed'],
+#                  ['not married', 'married', 'married', 'married',
+#                   'not married', 'not married', 'not married'], inplace=True)
+#
+#     # categorical fields
+#     category_col = ['workclass', 'race', 'education', 'marital-status', 'occupation', 'relationship', 'gender', 'native-country', 'income']
+#     for col in category_col:
+#         b, c = np.unique(data[col], return_inverse=True)
+#         data[col] = c
+#     datamat = data.values
+#
+#     datamat = np.random.permutation(datamat)
+#
+#     target = datamat[:, -1]
+#     datamat = datamat[:, :-1]
+#
+#     if scaler:
+#         scaler = StandardScaler()
+#         scaler.fit(datamat)
+#         datamat = scaler.transform(datamat)
+#
+#     datamat = np.concatenate([datamat, target[:, np.newaxis]], axis=1)
+#
+#     print('The dataset is loaded...')
+#     datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
+#
+#     print(datamat[0])
+#
+#     return datamat
 
 
 
@@ -327,9 +377,9 @@ def load_compas(frac=1):
 
 
     COMPAS_INPUT_FILE = dir+os.sep+"compas-scores-two-years.csv"
-    addr = "https://raw.githubusercontent.com/propublica/compas-analysis/master/compas-scores-two-years.csv"
+    # addr = "https://raw.githubusercontent.com/propublica/compas-analysis/master/compas-scores-two-years.csv"
 
-    check_data_file(COMPAS_INPUT_FILE, addr)
+    # check_data_file(COMPAS_INPUT_FILE, addr)
 
     # load the data and get some stats
     df = pd.read_csv(COMPAS_INPUT_FILE)
