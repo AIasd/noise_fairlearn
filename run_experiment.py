@@ -28,6 +28,8 @@ parser.add_argument('--include-sensible', dest='include_sensible', action='store
 
 parser.add_argument('--learner-name', dest='learner_name', type=str, default='lsq', help='Base learner for Agarwal\'s method.')
 
+parser.add_argument('--mode', dest='mode', type=str, default='four', help='number of settings(four or six)')
+
 parser.add_argument('--verbose', dest='verbose', action='store_true', help='print stats at each run')
 
 parser.add_argument('--plot-result', dest='plot_result', action='store_true', help='plot result')
@@ -54,9 +56,10 @@ trials = args.trials
 include_sensible = args.include_sensible
 filename = log_dir+'all_data_'+dataset+','+str(rho[0])+','+str(rho[1])+','+str(frac)+','+criteria \
            +','+classifier+','+str(trials)+','+str(include_sensible)+'.pickle'
+mode = args.mode
 verbose = args.verbose
 
-all_data = experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, learner_name, verbose)
+all_data = experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, learner_name, mode, verbose)
 
 if args.plot_result:
     plot(filename)

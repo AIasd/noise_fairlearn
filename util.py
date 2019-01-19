@@ -234,17 +234,6 @@ def scale_eps(eps, alpha_a, beta_a):
 
 
 def denoiseA(data_cor, rho):
-    # classifiers = [
-    #     GaussianNB(),
-    #     LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'),
-    #     KNeighborsClassifier(n_neighbors=3),
-    #     SVC(kernel="linear", C=0.025, probability=True, random_state=0),
-    #     SVC(gamma=2, C=1, probability=True, random_state=0),
-    #     RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
-    #     MLPClassifier(alpha=1, random_state=0, ),
-    #     AdaBoostClassifier(random_state=0),
-    #     QuadraticDiscriminantAnalysis()
-    # ]
 
     rho_a_plus, rho_a_minus = rho
 
@@ -252,9 +241,9 @@ def denoiseA(data_cor, rho):
     cor_dataA = data_cor[2]
     dataA = data_cor[5]
 
-    lnl2 = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
-    noise_matrix = np.array([[1-rho_a_plus, rho_a_plus],[rho_a_minus, 1-rho_a_minus]])
-    # noise_matrix = np.array([[1-rho_a_plus, rho_a_minus],[rho_a_plus, 1-rho_a_minus]])
+    lnl2 = LearningWithNoisyLabels(clf=LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
+    noise_matrix = np.array([[1-rho_a_minus, rho_a_plus],[rho_a_minus, 1-rho_a_plus]])
+    noise_matrix = None
     lnl2.fit(X = dataX.values, s = cor_dataA.values, noise_matrix=noise_matrix)
 
     denoised_dataA = pd.Series(lnl2.predict(dataX.values))
@@ -263,7 +252,7 @@ def denoiseA(data_cor, rho):
 
     print('after denoised:', np.sum(denoised_dataA==0), np.sum(denoised_dataA==1))
 
-    # lnl3 = SVC(gamma=2, C=1, probability=True, random_state=0)
+    # lnl3 = LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
     #
     # lnl3.fit(dataX.values, cor_dataA.values)
     # pred_dataA = pd.Series(lnl3.predict(dataX.values))
@@ -277,20 +266,24 @@ def denoiseA(data_cor, rho):
     print(lnl2.noise_matrix, rho_a_plus, rho_a_minus)
 
 
-    # lnl = LearningWithNoisyLabels(clf=SVC(gamma=2, C=1, probability=True, random_state=0))
-    # lnl.fit(X = dataX.values, s = cor_dataA.values)
-    #
-    # rho_a_plus_est = lnl.noise_matrix[0][1]
-    # rho_a_minus_est = lnl.noise_matrix[1][0]
-    # rho_est = [rho_a_plus_est, rho_a_minus_est]
-    #
-    # print(lnl.noise_matrix, rho_a_plus_est, rho_a_minus_est)
+    lnl = LearningWithNoisyLabels(LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
+    lnl.fit(X = dataX.values, s = cor_dataA.values)
+
+    denoised_dataA_est = pd.Series(lnl.predict(dataX.values))
+    data_denoised_est = copy.deepcopy(data_cor)
+    data_denoised_est[2] = denoised_dataA_est
+
+    rho_a_plus_est = lnl.noise_matrix[0][1]
+    rho_a_minus_est = lnl.noise_matrix[1][0]
+    rho_est = [rho_a_plus_est, rho_a_minus_est]
+
+    print(lnl.noise_matrix, rho_a_plus_est, rho_a_minus_est)
 
 
-    return data_denoised
+    return data_denoised, data_denoised_est, rho_est
 
 
-def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, learner_name='lsq', verbose=False):
+def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, learner_name='lsq', mode='four', verbose=False):
     '''
     dataset: one of ['compas', 'adult', 'adultr']
     rho: [a, b] where a, b in interval [0,0.5]
@@ -304,6 +297,7 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
                       if this is set to False, sensitive attribute will still be used for constraint(s).
     filename: the file name to store the log of experiment(s).
     learner_name: ['lsq', 'LR', 'SVM']. SVM is very slow. lsq does not work for law school dataset.
+    mode: ['four', 'six']
     verbose: boolean. If print out info at each run.
     '''
     sensible_name = None
@@ -349,13 +343,16 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     else:
         tests = [{"cons_class": moments.DP, "eps": eps} for eps in eps_list]
 
-    all_data = _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, criteria, classifier, include_sensible, learner, verbose)
+    all_data = _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, criteria, classifier, include_sensible, learner, mode, verbose)
     save_all_data(filename, all_data, eps_list)
 
     return all_data
 
-def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, creteria, classifier, include_sensible, learner, verbose):
-    n = 4
+def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, creteria, classifier, include_sensible, learner, mode, verbose):
+    if mode == 'six':
+        n = 6
+    else:
+        n = 4
     all_data = [{k:[[] for _ in range(trials)] for k in keys} for _ in range(n)]
 
     start = time.time()
@@ -387,19 +384,13 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         # p_01, p_11 = get_eta(data_nocor)
         # p_01_cor, p_11_cor = get_eta(data_cor)
 
-        data_denoised = denoiseA(data_cor, rho)
+        data_denoised, data_denoised_est, rho_est = denoiseA(data_cor, rho)
 
         # p_01_est, p_11_est = est_p(p_01_cor, p_11_cor, rho_est)
 
 
         alpha_a, beta_a = estimate_alpha_beta(cor_dataA, dataY, rho, creteria)
-        # alpha_a_est, beta_a_est = estimate_alpha_beta(cor_dataA, dataY, rho_est, creteria)
-
-        # print('data_cor', np.mean(data_cor[1].values), np.mean(data_cor[2].values))
-        #
-        # print('data_nocor', np.mean(data_nocor[1].values), np.mean(data_nocor[2].values))
-        #
-        # print('data_denoised', np.mean(data_denoised[1].values), np.mean(data_denoised[2].values))
+        alpha_a_est, beta_a_est = estimate_alpha_beta(cor_dataA, dataY, rho_est, creteria)
 
         for test_0 in tests:
             eps_0 = test_0['eps']
@@ -414,12 +405,16 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
             test['eps'] = scale_eps(eps_0, alpha_a, beta_a)
             res_cor_scale = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
-            # test['eps'] = scale_eps(eps_0, alpha_a_est, beta_a_est, p_01_est, p_11_est, creteria)
-            # res_cor_scale_est = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
-
-
-            # results = [res_cor, res_nocor, res_denoised, res_cor_scale, res_cor_scale_est]
             results = [res_cor, res_nocor, res_denoised, res_cor_scale]
+
+            if mode == 'six':
+                test['eps'] = scale_eps(eps_0, alpha_a_est, beta_a_est)
+                res_cor_scale_est = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
+
+                test['eps'] = eps_0
+                res_denoised_est = run_test(test, data_denoised_est, sensible_name, learner, creteria, verbose, classifier)
+
+                results = [res_cor, res_nocor, res_denoised, res_cor_scale, res_denoised_est, res_cor_scale_est]
 
             for k in keys:
                 for j in range(n):
@@ -650,11 +645,11 @@ def _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, mode, save
     Plot four graphs. Internal routine for plot
     '''
     curves_mean, curves_std = data
-    labels = ['cor', 'nocor', 'denoise', 'cor_scale']
+    labels = ['cor', 'nocor', 'denoise', 'cor_scale', 'cor_scale_est', 'denoise_est']
 
     fig, ax = plt.subplots()
 
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
 
     # labels = ['cor', 'nocor', 'cor_scale']
     for stat, err, label, color in zip(curves_mean, curves_std, labels, colors):
