@@ -228,20 +228,24 @@ def load_adult(frac=1, scaler=True):
     data = data[data["occupation"] != '?']
     data = data[data["native.country"] != '?']
     data = data[data["workclass"] != '?']
-    # raw_data = data[data.occupation != '?']
+    data = data[data["race"] != 'Asian-Pac-Islander']
+    data = data[data["race"] != 'Amer-Indian-Eskimo']
+    data = data[data["race"] != 'Other']
 
-
-
-
-    # print(data.values.shape, raw_data.values.shape)
 
     # create numerical columns representing the categorical data
-    data['workclass_num'] = data.workclass.map({'Private':0, 'State-gov':1, 'Federal-gov':2, 'Self-emp-not-inc':3, 'Self-emp-inc':4, 'Local-gov':5, 'Without-pay':6})
-    data['over50K'] = np.where(data.income == '<=50K', 0, 1)
-    data['marital_num'] = data['marital.status'].map({'Widowed':0, 'Divorced':1, 'Separated':2, 'Never-married':3, 'Married-civ-spouse':4, 'Married-AF-spouse':4, 'Married-spouse-absent':5})
-    data['race_num'] = data.race.map({'White':0, 'Black':1, 'Asian-Pac-Islander':2, 'Amer-Indian-Eskimo':3, 'Other':4})
-    data['sex_num'] = np.where(data.sex == 'Female', 0, 1)
-    data['rel_num'] = data.relationship.map({'Not-in-family':0, 'Unmarried':0, 'Own-child':0, 'Other-relative':0, 'Husband':1, 'Wife':1})
+    data['workclass_num'] = data.workclass.map({'Private':0.0, 'State-gov':1.0, 'Federal-gov':2.0, 'Self-emp-not-inc':3.0, 'Self-emp-inc':4.0, 'Local-gov':5.0, 'Without-pay':6.0})
+    data['over50K'] = np.where(data.income == '<=50K', 0.0, 1.0)
+    data['marital_num'] = data['marital.status'].map({'Widowed':0.0, 'Divorced':1.0, 'Separated':2.0, 'Never-married':3.0, 'Married-civ-spouse':4.0, 'Married-AF-spouse':4.0, 'Married-spouse-absent':5.0})
+
+    data['race_num'] = data.race.map({'Black':0.0, 'White':1.0, 'Asian-Pac-Islander':2.0, 'Amer-Indian-Eskimo':3.0, 'Other':4.0})
+    data['sex_num'] = np.where(data.sex == 'Female', 0.0, 1.0)
+    data['rel_num'] = data.relationship.map({'Not-in-family':0.0, 'Unmarried':0.0, 'Own-child':0.0, 'Other-relative':0.0, 'Husband':1.0, 'Wife':1.0})
+
+    data = data[data['race_num'] < 2]
+
+    print(data.values.shape)
+
 
     X = data[['workclass_num', 'education.num', 'marital_num', 'race_num', 'sex_num', 'rel_num', 'capital.gain', 'capital.loss']]
     y = data.over50K
