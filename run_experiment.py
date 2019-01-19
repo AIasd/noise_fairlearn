@@ -41,7 +41,7 @@ rho = [args.rho_plus, args.rho_minus]
 frac = args.frac
 learner_name = args.learner_name
 if dataset == 'adult' or dataset == 'adultr':
-    eps_list = [0.001 * i for i in range(1, 10)]
+    eps_list = [0.01 * i for i in range(1, 10)]
 elif dataset == 'compas':
     eps_list = [0.02 * i for i in range(1, 10)]
 elif dataset == 'law':
