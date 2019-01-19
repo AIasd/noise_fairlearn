@@ -243,7 +243,6 @@ def denoiseA(data_cor, rho):
 
     lnl2 = LearningWithNoisyLabels(clf=LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
     noise_matrix = np.array([[1-rho_a_minus, rho_a_plus],[rho_a_minus, 1-rho_a_plus]])
-    noise_matrix = None
     lnl2.fit(X = dataX.values, s = cor_dataA.values, noise_matrix=noise_matrix)
 
     denoised_dataA = pd.Series(lnl2.predict(dataX.values))
