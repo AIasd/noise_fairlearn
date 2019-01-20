@@ -497,3 +497,173 @@ def load_compas(frac=1):
     ref[tmp==1.0] = 0.0
 
     return datamat
+
+def load_bank(frac=1):
+    '''
+        job                    11162 non-null int64
+        default                11162 non-null int64
+        housing                11162 non-null int64
+        loan                   11162 non-null int64
+        contact                11162 non-null int64
+        month                  11162 non-null int64
+        campaign               11162 non-null int64
+        Middle_Aged            11162 non-null int64
+        primary                11162 non-null int64
+        secondary              11162 non-null int64
+        tertiary               11162 non-null int64
+        unknown                11162 non-null int64
+        Neg_Balance            11162 non-null int64
+        No_Balance             11162 non-null int64
+        Pos_Balance            11162 non-null int64
+        Not_Contacted          11162 non-null int64
+        Contacted              11162 non-null int64
+        t_min                  11162 non-null int64
+        t_e_min                11162 non-null int64
+        e_min                  11162 non-null int64
+        pdays_not_contacted    11162 non-null int64
+        months_passed          11162 non-null float64
+        married                11162 non-null int64
+        singles                11162 non-null int64
+        divorced               11162 non-null int64
+    '''
+    data = pd.read_csv('datasets/bank.csv',sep=',',header='infer')
+    data = data.drop(['day','poutcome'],axis=1)
+
+    def binaryType_(data):
+
+        data.deposit.replace(('yes', 'no'), (1, 0), inplace=True)
+        data.default.replace(('yes','no'),(1,0),inplace=True)
+        data.housing.replace(('yes','no'),(1,0),inplace=True)
+        data.loan.replace(('yes','no'),(1,0),inplace=True)
+        #data.marital.replace(('married','single','divorced'),(1,2,3),inplace=True)
+        data.contact.replace(('telephone','cellular','unknown'),(1,2,3),inplace=True)
+        data.month.replace(('jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'),(1,2,3,4,5,6,7,8,9,10,11,12),inplace=True)
+        #data.education.replace(('primary','secondary','tertiary','unknown'),(1,2,3,4),inplace=True)
+
+        return data
+
+    data = binaryType_(data)
+
+
+    def age_(data):
+        data['Middle_Aged'] = 0
+        data.loc[(data['age'] <= 60) & (data['age'] >= 25),'Middle_Aged'] = 1
+        return data
+
+    def campaign_(data):
+
+
+        data.loc[data['campaign'] == 1,'campaign'] = 1
+        data.loc[(data['campaign'] >= 2) & (data['campaign'] <= 3),'campaign'] = 2
+        data.loc[data['campaign'] >= 4,'campaign'] = 3
+
+        return data
+
+    def duration_(data):
+
+        data['t_min'] = 0
+        data['t_e_min'] = 0
+        data['e_min']=0
+        data.loc[data['duration'] <= 5,'t_min'] = 1
+        data.loc[(data['duration'] > 5) & (data['duration'] <= 10),'t_e_min'] = 1
+        data.loc[data['duration'] > 10,'e_min'] = 1
+
+        return data
+
+    def pdays_(data):
+        data['pdays_not_contacted'] = 0
+        data['months_passed'] = 0
+        data.loc[data['pdays'] == -1 ,'pdays_not_contacted'] = 1
+        data['months_passed'] = data['pdays']/30
+        data.loc[(data['months_passed'] >= 0) & (data['months_passed'] <=2) ,'months_passed'] = 1
+        data.loc[(data['months_passed'] > 2) & (data['months_passed'] <=6),'months_passed'] = 2
+        data.loc[data['months_passed'] > 6 ,'months_passed'] = 3
+
+        return data
+
+    def previous_(data):
+
+        data['Not_Contacted'] = 0
+        data['Contacted'] = 0
+        data.loc[data['previous'] == 0 ,'Not_Contacted'] = 1
+        data.loc[(data['previous'] >= 1) & (data['pdays'] <=99) ,'Contacted'] = 1
+        data.loc[data['previous'] >= 100,'Contacted'] = 2
+
+        return data
+
+    def balance_(data):
+        data['Neg_Balance'] = 0
+        data['No_Balance'] = 0
+        data['Pos_Balance'] = 0
+
+        data.loc[~data['balance']<0,'Neg_Balance'] = 1
+        data.loc[data['balance'] == 0,'No_Balance'] = 1
+        data.loc[(data['balance'] >= 1) & (data['balance'] <= 100),'Pos_Balance'] = 1
+        data.loc[(data['balance'] >= 101) & (data['balance'] <= 500),'Pos_Balance'] = 2
+        data.loc[(data['balance'] >= 501) & (data['balance'] <= 2000),'Pos_Balance'] = 3
+        data.loc[(data['balance'] >= 2001) & (data['balance'] <= 10000),'Pos_Balance'] = 4
+        data.loc[data['balance'] >= 10001,'Pos_Balance'] = 5
+
+        return data
+
+    def job_(data):
+
+        data.loc[data['job'] == "management",'job'] = 1
+        data.loc[data['job'] == "technician",'job'] = 2
+        data.loc[data['job'] == "entrepreneur",'job'] = 3
+        data.loc[data['job'] == "blue-collar",'job'] = 4
+        data.loc[data['job'] == "retired",'job'] = 5
+        data.loc[data['job'] == "admin.",'job'] = 6
+        data.loc[data['job'] == "services",'job'] = 7
+        data.loc[data['job'] == "self-employed",'job'] = 8
+        data.loc[data['job'] == "unemployed",'job'] = 9
+        data.loc[data['job'] == "student",'job'] = 10
+        data.loc[data['job'] == "housemaid",'job'] = 11
+        data.loc[data['job'] == "unknown",'job'] = 12
+
+        return data
+
+    def marital_(data):
+
+        data['married'] = 0
+        data['singles'] = 0
+        data['divorced'] = 0
+        data.loc[data['marital'] == 'married','married'] = 1
+        data.loc[data['marital'] == 'singles','singles'] = 1
+        data.loc[data['marital'] == 'divorced','divorced'] = 1
+
+        return data
+
+    def education_(data):
+
+        data['primary'] = 0
+        data['secondary'] = 0
+        data['tertiary'] = 0
+        data['unknown'] = 0
+        data.loc[data['education'] == 'primary','primary'] = 1
+        data.loc[data['education'] == 'secondary','secondary'] = 1
+        data.loc[data['education'] == 'tertiary','tertiary'] = 1
+        data.loc[data['education'] == 'unknown','unknown'] = 1
+
+        return data
+
+    data = campaign_(data)
+    data = age_(data)
+    data = education_(data)
+    data = balance_(data)
+    data = job_(data)
+    data = previous_(data)
+    data = duration_(data)
+    data = pdays_(data)
+    data = marital_(data)
+
+    data_y = pd.DataFrame(data['deposit'])
+    data_X = data.drop(['deposit','balance','previous','pdays','age','duration','education','marital'],axis=1)
+
+    datamat = np.concatenate([data_X.values, data_y.values], axis=1)
+    datamat = np.random.permutation(datamat)
+    datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
+
+
+
+    return datamat
