@@ -17,7 +17,9 @@ This repo implements a general interface for noisy fair binary classification. I
 
  * UCI Adult
  * UCI German
+ * UCI Bank
  * COMPAS
+ * Law School
 
 ## Usage
 ```

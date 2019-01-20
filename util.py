@@ -28,7 +28,7 @@ import os
 from collections import namedtuple
 from random import seed
 
-from load_data import load_adult, load_compas, load_law, load_german
+from load_data import load_adult, load_compas, load_law, load_german, load_bank
 from measures import fair_measure
 
 import seaborn as sns
@@ -333,10 +333,15 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
         datamat = load_german(frac)
         sensible_name = 'Foreign'
         sensible_feature = 21
+    elif dataset == 'bank':
+        datamat = load_bank(frac)
+        sensible_name = 'Middle_Aged'
+        sensible_feature = 7
     else:
         datamat = load_compas(frac)
         sensible_name = 'race'
         sensible_feature = 4
+
 
     if learner_name == 'LR':
         learner = LR()
