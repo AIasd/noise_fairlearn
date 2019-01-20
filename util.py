@@ -256,6 +256,9 @@ def denoiseA(data_cor, rho, mode):
 
     print(lnl.noise_matrix, rho_a_plus, rho_a_minus)
 
+    rho_est = None
+    data_denoised_est = None
+
     if mode == 'six':
 
         lnl2 = LearningWithNoisyLabels(LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
@@ -386,8 +389,7 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         corrupt(cor_dataA, data_nocor[1], rho, creteria)
         data_cor[2] = cor_dataA
 
-        dataX = data_nocor[0]
-
+        # dataX = data_nocor[0]
         # lnl3 = SVC()
         # # LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
         # lnl3.fit(dataX.values, cor_dataA.values)
@@ -408,7 +410,9 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
 
 
         alpha_a, beta_a = estimate_alpha_beta(cor_dataA, dataY, rho, creteria)
-        alpha_a_est, beta_a_est = estimate_alpha_beta(cor_dataA, dataY, rho_est, creteria)
+
+        if mode == 'six':
+            alpha_a_est, beta_a_est = estimate_alpha_beta(cor_dataA, dataY, rho_est, creteria)
 
         for test_0 in tests:
             eps_0 = test_0['eps']
