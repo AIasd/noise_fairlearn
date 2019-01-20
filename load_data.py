@@ -526,12 +526,17 @@ def load_bank(frac=1):
         singles                11162 non-null int64
         divorced               11162 non-null int64
     '''
-    data = pd.read_csv('datasets/bank.csv',sep=',',header='infer')
+    data = pd.read_csv('datasets/bank-full.csv',sep=';',header='infer', skipinitialspace=True)
+    print(data.info())
+
+
     data = data.drop(['day','poutcome'],axis=1)
+
+
 
     def binaryType_(data):
 
-        data.deposit.replace(('yes', 'no'), (1, 0), inplace=True)
+        data.y.replace(('yes', 'no'), (1, 0), inplace=True)
         data.default.replace(('yes','no'),(1,0),inplace=True)
         data.housing.replace(('yes','no'),(1,0),inplace=True)
         data.loan.replace(('yes','no'),(1,0),inplace=True)
@@ -657,8 +662,8 @@ def load_bank(frac=1):
     data = pdays_(data)
     data = marital_(data)
 
-    data_y = pd.DataFrame(data['deposit'])
-    data_X = data.drop(['deposit','balance','previous','pdays','age','duration','education','marital'],axis=1)
+    data_y = pd.DataFrame(data['y'])
+    data_X = data.drop(['y','balance','previous','pdays','age','duration','education','marital'],axis=1)
 
     datamat = np.concatenate([data_X.values, data_y.values], axis=1)
     datamat = np.random.permutation(datamat)
