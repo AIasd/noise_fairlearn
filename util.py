@@ -82,7 +82,7 @@ class LR:
 
 class SVM:
     def __init__(self):
-        self.clf = SVC(kernel="linear", C=0.025, probability=True, random_state=0)
+        self.clf = SVC()
     def fit(self, X, Y, W):
         try:
             self.clf.fit(X.values, Y.values)
@@ -93,7 +93,10 @@ class SVM:
         try:
             return pd.Series(self.clf.predict(X.values))
         except NotFittedError:
-            return pd.Series(np.zeros(X.values.shape[0]))
+            pred = np.random.random(X.values.shape[0])
+            pred[pred > 0.5] = 1.0
+            pred[pred <= 0.5] = 0.0
+            return pd.Series(pred)
 
 
 
@@ -241,42 +244,42 @@ def denoiseA(data_cor, rho):
     cor_dataA = data_cor[2]
     dataA = data_cor[5]
 
-    lnl2 = LearningWithNoisyLabels(clf=LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
+    lnl = LearningWithNoisyLabels(clf=LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
     noise_matrix = np.array([[1-rho_a_minus, rho_a_plus],[rho_a_minus, 1-rho_a_plus]])
-    lnl2.fit(X = dataX.values, s = cor_dataA.values, noise_matrix=noise_matrix)
+    lnl.fit(X = dataX.values, s = cor_dataA.values, noise_matrix=noise_matrix)
 
-    denoised_dataA = pd.Series(lnl2.predict(dataX.values))
+    denoised_dataA = pd.Series(lnl.predict(dataX.values))
     data_denoised = copy.deepcopy(data_cor)
     data_denoised[2] = denoised_dataA
 
-    print('after denoised:', np.sum(denoised_dataA==0), np.sum(denoised_dataA==1))
 
-    # lnl3 = LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
-    #
-    # lnl3.fit(dataX.values, cor_dataA.values)
-    # pred_dataA = pd.Series(lnl3.predict(dataX.values))
+    lnl2 = LearningWithNoisyLabels(LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
+    lnl2.fit(X = dataX.values, s = cor_dataA.values)
+
+    denoised_dataA_est = pd.Series(lnl2.predict(dataX.values))
+    data_denoised_est = copy.deepcopy(data_cor)
+    data_denoised_est[2] = denoised_dataA_est
+
+    rho_a_plus_est = lnl2.noise_matrix[0][1]
+    rho_a_minus_est = lnl2.noise_matrix[1][0]
+    rho_est = [rho_a_plus_est, rho_a_minus_est]
+
+
+    lnl3 = LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
+    lnl3.fit(dataX.values, cor_dataA.values)
+    pred_dataA = pd.Series(lnl3.predict(dataX.values))
+
+
+    print(lnl.noise_matrix, rho_a_plus, rho_a_minus)
+    print(lnl2.noise_matrix, rho_a_plus_est, rho_a_minus_est)
 
     # Check recovery accuracy
     auc1 = np.mean(dataA.values==cor_dataA.values)
     auc2 = np.mean(dataA.values==denoised_dataA.values)
-    # auc3 = np.mean(dataA.values==pred_dataA.values)
+    auc3 = np.mean(dataA.values==denoised_dataA_est.values)
+    auc4 = np.mean(dataA.values==pred_dataA.values)
 
-    print('auc:', auc1, auc2)
-    print(lnl2.noise_matrix, rho_a_plus, rho_a_minus)
-
-
-    lnl = LearningWithNoisyLabels(LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
-    lnl.fit(X = dataX.values, s = cor_dataA.values)
-
-    denoised_dataA_est = pd.Series(lnl.predict(dataX.values))
-    data_denoised_est = copy.deepcopy(data_cor)
-    data_denoised_est[2] = denoised_dataA_est
-
-    rho_a_plus_est = lnl.noise_matrix[0][1]
-    rho_a_minus_est = lnl.noise_matrix[1][0]
-    rho_est = [rho_a_plus_est, rho_a_minus_est]
-
-    print(lnl.noise_matrix, rho_a_plus_est, rho_a_minus_est)
+    print('auc:', auc1, auc2, auc3, auc4)
 
 
     return data_denoised, data_denoised_est, rho_est
