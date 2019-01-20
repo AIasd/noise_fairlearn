@@ -236,13 +236,15 @@ def scale_eps(eps, alpha_a, beta_a):
 
 
 
-def denoiseA(data_cor, rho):
+def denoiseA(data_cor, rho, mode):
 
     rho_a_plus, rho_a_minus = rho
 
     dataX = data_cor[0]
     cor_dataA = data_cor[2]
     dataA = data_cor[5]
+
+    auc3, auc4 = None, None
 
     lnl = LearningWithNoisyLabels(clf=LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
     noise_matrix = np.array([[1-rho_a_minus, rho_a_plus],[rho_a_minus, 1-rho_a_plus]])
@@ -252,32 +254,36 @@ def denoiseA(data_cor, rho):
     data_denoised = copy.deepcopy(data_cor)
     data_denoised[2] = denoised_dataA
 
-
-    lnl2 = LearningWithNoisyLabels(LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
-    lnl2.fit(X = dataX.values, s = cor_dataA.values)
-
-    denoised_dataA_est = pd.Series(lnl2.predict(dataX.values))
-    data_denoised_est = copy.deepcopy(data_cor)
-    data_denoised_est[2] = denoised_dataA_est
-
-    rho_a_plus_est = lnl2.noise_matrix[0][1]
-    rho_a_minus_est = lnl2.noise_matrix[1][0]
-    rho_est = [rho_a_plus_est, rho_a_minus_est]
-
-
-    lnl3 = LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
-    lnl3.fit(dataX.values, cor_dataA.values)
-    pred_dataA = pd.Series(lnl3.predict(dataX.values))
-
-
     print(lnl.noise_matrix, rho_a_plus, rho_a_minus)
-    print(lnl2.noise_matrix, rho_a_plus_est, rho_a_minus_est)
+
+    if mode == 'six':
+
+        lnl2 = LearningWithNoisyLabels(LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
+        lnl2.fit(X = dataX.values, s = cor_dataA.values)
+
+        denoised_dataA_est = pd.Series(lnl2.predict(dataX.values))
+        data_denoised_est = copy.deepcopy(data_cor)
+        data_denoised_est[2] = denoised_dataA_est
+
+        rho_a_plus_est = lnl2.noise_matrix[0][1]
+        rho_a_minus_est = lnl2.noise_matrix[1][0]
+        rho_est = [rho_a_plus_est, rho_a_minus_est]
+
+        print(lnl2.noise_matrix, rho_a_plus_est, rho_a_minus_est)
+
+
+        lnl3 = LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
+        lnl3.fit(dataX.values, cor_dataA.values)
+        pred_dataA = pd.Series(lnl3.predict(dataX.values))
+
+
+        auc3 = np.mean(dataA.values==denoised_dataA_est.values)
+        auc4 = np.mean(dataA.values==pred_dataA.values)
 
     # Check recovery accuracy
     auc1 = np.mean(dataA.values==cor_dataA.values)
     auc2 = np.mean(dataA.values==denoised_dataA.values)
-    auc3 = np.mean(dataA.values==denoised_dataA_est.values)
-    auc4 = np.mean(dataA.values==pred_dataA.values)
+
 
     print('auc:', auc1, auc2, auc3, auc4)
 
@@ -380,12 +386,23 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         corrupt(cor_dataA, data_nocor[1], rho, creteria)
         data_cor[2] = cor_dataA
 
+        dataX = data_nocor[0]
+
+        # lnl3 = SVC()
+        # # LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
+        # lnl3.fit(dataX.values, cor_dataA.values)
+        # pred_dataA = pd.Series(lnl3.predict(dataX.values))
+        # print('---weird---')
+        # print(np.mean(cor_dataA.values==pred_dataA.values))
+        # print(np.mean(dataA.values==pred_dataA.values))
+        # print('-----------')
+
 
 
         # p_01, p_11 = get_eta(data_nocor)
         # p_01_cor, p_11_cor = get_eta(data_cor)
 
-        data_denoised, data_denoised_est, rho_est = denoiseA(data_cor, rho)
+        data_denoised, data_denoised_est, rho_est = denoiseA(data_cor, rho, mode)
 
         # p_01_est, p_11_est = est_p(p_01_cor, p_11_cor, rho_est)
 
