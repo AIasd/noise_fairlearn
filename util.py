@@ -151,7 +151,6 @@ def permute_and_split(datamat, permute=True, train_ratio=0.8):
     '''
     Permute and split dataset into training and testing.
     '''
-
     if permute:
         datamat = np.random.permutation(datamat)
 
@@ -364,6 +363,7 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     return all_data
 
 def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, creteria, classifier, include_sensible, learner, mode, verbose):
+
     if mode == 'six':
         n = 6
     else:

@@ -50,7 +50,7 @@ elif dataset == 'law':
 elif dataset == 'german':
     eps_list = [0.01 * i for i in range(1, 10)]
 elif dataset == 'bank':
-    eps_list = [0.02 * i for i in range(1, 10)]
+    eps_list = [0.002 * i for i in range(1, 10)]
 
 criteria = args.criteria
 classifier = args.classifier
