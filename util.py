@@ -317,12 +317,12 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     print(dataset)
     if dataset == 'adultr':
         datamat = load_adult(frac)
-        sensible_name = 'race_num'
-        sensible_feature = 3
+        sensible_name = 'race'
+        sensible_feature = 8
     elif dataset == 'adult':
         datamat = load_adult(frac)
-        sensible_name = 'sex_num'
-        sensible_feature = 4
+        sensible_name = 'gender'
+        sensible_feature = 9
     elif dataset == 'law':
         datamat = load_law(frac)
         sensible_name = 'racetxt'
