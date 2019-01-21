@@ -174,8 +174,8 @@ def load_law(frac=1, scaler=True):
 
 
 
-    # datamat = datamat[datamat[:,11].argsort()]
-    # datamat = datamat[:int(len(datamat)/7)]
+    datamat = datamat[datamat[:,9].argsort()]
+    datamat = datamat[:int(len(datamat)/5)]
 
 
     datamat = np.random.permutation(datamat)
