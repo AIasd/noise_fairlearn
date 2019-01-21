@@ -8,14 +8,9 @@ from sklearn import svm
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.exceptions import NotFittedError
-
 from sklearn.linear_model import LogisticRegression
-from sklearn.naive_bayes import GaussianNB
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
-from sklearn.neural_network import MLPClassifier
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+
 
 from cleanlab.classification import LearningWithNoisyLabels
 
@@ -380,13 +375,7 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         dataY = data_nocor[1]
         dataA = data_nocor[2]
 
-        # a0y1 = np.sum([1.0 if a==0 and y==1 else 0.0 for a,y in zip(dataA.values, dataY.values)])
-        # a0 = np.sum([1.0 if a==0 else 0.0 for a in dataA.values])
-        #
-        # a1y1 = np.sum([1.0 if a==1 and y==1 else 0.0 for a,y in zip(dataA.values, dataY.values)])
-        # a1 = np.sum([1.0 if a==1 else 0.0 for a in dataA.values])
-        # print('a=0,y=1:', a0y1 , 'a=0', a0, a0y1/a0)
-        # print('a=1,y=1:', a1y1 , 'a=1', a1, a1y1/a1)
+
 
         cor_dataA = dataA.copy()
         data_cor = copy.deepcopy(data_nocor)
@@ -394,24 +383,8 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
         corrupt(cor_dataA, data_nocor[1], rho, creteria)
         data_cor[2] = cor_dataA
 
-        # dataX = data_nocor[0]
-        # lnl3 = SVC()
-        # # LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
-        # lnl3.fit(dataX.values, cor_dataA.values)
-        # pred_dataA = pd.Series(lnl3.predict(dataX.values))
-        # print('---weird---')
-        # print(np.mean(cor_dataA.values==pred_dataA.values))
-        # print(np.mean(dataA.values==pred_dataA.values))
-        # print('-----------')
-
-
-
-        # p_01, p_11 = get_eta(data_nocor)
-        # p_01_cor, p_11_cor = get_eta(data_cor)
 
         data_denoised, data_denoised_est, rho_est = denoiseA(data_cor, rho, mode)
-
-        # p_01_est, p_11_est = est_p(p_01_cor, p_11_cor, rho_est)
 
 
         alpha_a, beta_a = estimate_alpha_beta(cor_dataA, dataY, rho, creteria)
@@ -505,15 +478,9 @@ def run_test_Agarwal(test, data, sensible_name, learner, creteria):
 
     def _get_stats(clf, dataX, dataA, dataY):
         pred = clf(dataX)
-        # print('accuracy', np.mean(pred.values==dataY.values))
+
         disp = fair_measure(pred, dataA, dataY, creteria)
-        # print('dataX', dataX.values.shape, dataX.values[3, :])
-        # print('pred', pred.values[:20])
-        # print('dataY', dataY.values[:20])
-        # print(np.mean(dataY.values), np.mean(pred))
         error = np.mean(np.abs(dataY.values-pred.values))
-        # print(dataY.values[:10], pred.values[:10])
-        # print('disp, error', disp, error)
         return disp, error
 
     res["disp_train"], res["error_train"] = _get_stats(Q, dataX_train, dataA_train, dataY_train)
@@ -575,8 +542,6 @@ def run_test_Zafar(test, data, sensible_name, learner, creteria):
     res["error_test"] = 1 - test_score
 
     return res
-
-
 
 
 
@@ -644,7 +609,14 @@ def restore_all_data(filename):
     return all_data, eps_list
 
 
-def plot(filename, ref_end=0.2, ref_line=[False, False, False, False], mode='four', save=False):
+def plot(filename, ref_end=0.2, ref_line=[False, False, False, False], mode='contain_denoise', save=False):
+    '''
+    filename: str. The name of the file storing data used for plotting.
+    ref_end: positive real number. the endding point of the ref line. It is only applicable when ref_line contains value True.
+    ref_line: a list of booleans with length four. This controls if adding ref line to the generated graphs.
+    mode: str. If include denoise curves in the plot.
+    save: boolean. If save the plotted graphs.
+    '''
     y_label = 'DDP'
 
     p_eo = re.compile('EO')
@@ -680,21 +652,16 @@ def _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, mode, save
 
     # labels = ['cor', 'nocor', 'cor_scale']
     for stat, err, label, color in zip(curves_mean, curves_std, labels, colors):
-        if mode == 'three':
-            if label != 'denoise':
+        if mode != 'contain_denoise':
+            if label != 'denoise' and label != 'denoise_est':
                 ax.errorbar(eps_list, stat[k], yerr=err[k], label=label.replace('_', ' '), color=color)
         else:
             ax.errorbar(eps_list, stat[k], yerr=err[k], label=label.replace('_', ' '))
     if ref:
-        # lims = [
-        #     np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
-        #     np.max([ax.get_xlim(), ax.get_ylim()])   # max of both axes
-        # ]
-        # lims2 = copy.deepcopy(lims)
+
         lims = [0, ref_end]
         lims2 = [0, ref_end]
 
-        # lims[1] /= 2
         ax.plot(lims, lims2, 'k-', alpha=0.75, zorder=0, color='grey', linestyle='dashed')
 
     title_content = None
@@ -730,134 +697,3 @@ def _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, mode, save
 
     if save:
         fig.savefig(save_dir+k+'_'+save_file_content+'.pdf', bbox_inches='tight')
-
-
-
-
-# The following measure
-# def run_test_Agarwal(test, data, sensible_name, learner, creteria):
-#
-#     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
-#
-#     res_tuple = red.expgrad(dataX, dataA, dataY, learner,
-#                             cons=test["cons_class"](), eps=test["eps"])
-#
-#     res = res_tuple._asdict()
-#
-#     Q = res["best_classifier"]
-#     res["n_classifiers"] = len(res["classifiers"])
-#
-#     disp = test["cons_class"]()
-#     disp.init(dataX_train, dataA_train, dataY_train)
-#
-#     disp_test = test["cons_class"]()
-#     disp_test.init(dataX_test, dataA_test, dataY_test)
-#
-#     error = moments.MisclassError()
-#     error.init(dataX_train, dataA_train, dataY_train)
-#
-#     error_test = moments.MisclassError()
-#     error_test.init(dataX_test, dataA_test, dataY_test)
-#
-#     res["disp_train"] = disp.gamma(Q, True).max()
-#     res["disp_test"] = disp_test.gamma(Q, True).max()
-#     res["error_train"] = error.gamma(Q, True)[0]
-#     res["error_test"] = error_test.gamma(Q, True)[0]
-#
-#     return res
-
-# def run_test_Zafar(test, data, sensible_name, learner, creteria):
-#
-#     x, y, x_control, x_train, y_train, x_control_train, x_test, y_test, x_control_test = convert_data_format_Zafar(data, sensible_name)
-#     sensitive_attrs = [sensible_name]
-#
-#     loss_function = "logreg" # perform the experiments with logistic regression
-#     EPS = 1e-6
-#
-#     cons_type = 1 # FPR constraint -- just change the cons_type, the rest of parameters should stay the same
-#     tau = 5.0
-#     mu = 1.2
-#     sensitive_attrs_to_cov_thresh = {sensible_name: {0:{0:0, 1:test['eps']}, 1:{0:0, 1:test['eps']}, 2:{0:0, 1:test['eps']}}} # zero covariance threshold, means try to get the fairest solution
-#     cons_params = {"cons_type": cons_type,
-#                     "tau": tau,
-#                     "mu": mu,
-#                     "sensitive_attrs_to_cov_thresh": sensitive_attrs_to_cov_thresh}
-#
-#
-#     def _train_test_classifier():
-#         w = fdm.train_model_disp_mist(x, y, x_control, loss_function, EPS, cons_params)
-#
-#
-#
-#         train_score, test_score, cov_all_train, cov_all_test, s_attr_to_fp_fn_train, s_attr_to_fp_fn_test = fdm.get_clf_stats(w, x_train, y_train, x_control_train, x_test, y_test, x_control_test, sensitive_attrs)
-#         disp_test = np.abs(s_attr_to_fp_fn_test[sensible_name][0]["fpr"] - s_attr_to_fp_fn_test[sensible_name][0]["fpr"])
-#         disp_train = np.abs(s_attr_to_fp_fn_train[sensible_name][0]["fpr"] - s_attr_to_fp_fn_train[sensible_name][0]["fpr"])
-#
-#
-#         # accuracy and FPR are for the test because we need of for plotting
-#         return disp_test, disp_train, test_score, train_score
-#
-#
-#     disp_test, disp_train, test_score, train_score  = _train_test_classifier()
-#     res = dict()
-#     res["disp_train"] = disp_train
-#     res["disp_test"] = disp_test
-#     res["error_train"] = 1-train_score
-#     res["error_test"] = 1-test_score
-#
-#     return res
-
-# def get_eta(data):
-#     '''
-#     Calculate Pr[Y=1|A=0] and Pr[Y=1|A=1] in training set.
-#     '''
-#     dataY, dataA = data[1], data[2]
-#     c_a_0, c_a_1, c_01, c_11 = 0, 0, 0, 0
-#
-#     for y, a in zip(dataY, dataA):
-#         if a == 0:
-#             c_a_0 += 1
-#             if y == 1:
-#                 c_01 += 1
-#         else:
-#             c_a_1 += 1
-#             if y == 1:
-#                 c_11 += 1
-#     p_01 = c_01 / c_a_0
-#     p_11 = c_11 / c_a_1
-#     # print('p_01:', p_01, 'p_11:', p_11)
-#     return p_01, p_11
-#
-# def est_p(p_01_cor, p_11_cor, rho_est):
-#     '''
-#     estimate p_01 and p_11 using p_01_cor and rho_est
-#     '''
-#
-#     rho_a_plus_est, rho_a_minus_est = rho_est
-#     p_01_est = (p_01_cor - rho_a_minus_est)/(1 - rho_a_plus_est - rho_a_minus_est)
-#     p_11_est = (p_11_cor - rho_a_minus_est)/(1 - rho_a_plus_est - rho_a_minus_est)
-#
-#     return p_01_est, p_11_est
-
-
-  # rho_a_plus, rho_a_minus = rho
-  #
-  # pi_a_corr = np.sum([1.0 if a > 0 and y > 0 else 0.0 for a, y in zip(cor_dataA, dataY)])/ np.sum([1.0 if y > 0 else 0.0 for y in dataY])
-  #
-  # pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
-  #
-  # alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
-  # beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
-  # print('alpha_a', alpha_a, beta_a)
-  #
-  # p_01, p_11 = get_eta(data_nocor)
-  #
-  #
-  # pi_a_corr = np.mean([1.0 if a > 0 else 0.0 for a in cor_dataA])
-  # pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
-  # alpha_a = (1-pi_a)*rho_a_minus / pi_a_corr
-  # beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
-  #
-  # alpha_a_p = alpha_a*p_01 / ((1-alpha_a)*p_11 + alpha_a*p_01)
-  # beta_a_p = beta_a*p_11 / ((1-beta_a)*p_01 + beta_a*p_11)
-  # print('alpha_a_p', alpha_a_p, beta_a_p)

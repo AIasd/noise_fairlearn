@@ -1,17 +1,17 @@
 '''
 This file contains code for preprocessing/loading adult/compas dataset
 
+Code for loading German Credit Risk dataset is modified from:
+https://www.kaggle.com/kabure/predicting-credit-risk-model-pipeline
 
-Code for loading adult dataset is modified from:
+Code for loading UCI adult dataset is modified from:
 https://github.com/jmikko/fair_ERM/blob/master/load_data.py
-
-TBD: Better preprocessing(apply more one-hot-encoding) can be used. See
-https://github.com/mbilalzafar/fair-classification/blob/master/disparate_impact/adult_data_demo/prepare_adult_data.py
-
 
 Code for loading COMPAS dataset is modified from:
 https://github.com/mbilalzafar/fair-classification/blob/master/disparate_mistreatment/propublica_compas_data_demo/load_compas_data.py
 
+Code for loading Bank Marketing dataset is modified from:
+https://www.kaggle.com/mayurjain/ml-bank-marketing-solution
 '''
 import numpy as np
 import pandas as pd
@@ -28,22 +28,6 @@ SEED = 1122334455
 seed(SEED) # set the random seed so that the random permutations can be reproduced again
 np.random.seed(SEED)
 
-
-# def check_data_file(fname, addr):
-#     '''
-#     The code will look for the data file in the present directory, if it is not found, it will download them from GitHub.
-#     '''
-#     print("Looking for file '%s' in the current directory..." % fname)
-#
-#     if not os.path.isfile(fname):
-#         print("'%s' not found! Downloading from GitHub..." % fname)
-#         response = url.urlopen(addr)
-#         data = response.read()
-#         with open(fname, "wb") as fileOut:
-#             fileOut.write(data)
-#         print("'%s' download and saved locally.." % fname)
-#     else:
-#         print("File found in current directory..")
 
 def load_german(frac=1, scaler=True):
     '''
@@ -172,8 +156,6 @@ def load_law(frac=1, scaler=True):
     datamat[:, 9] = temp
 
 
-
-
     datamat = datamat[datamat[:,9].argsort()]
     datamat = datamat[:int(len(datamat)/5)]
 
@@ -200,58 +182,6 @@ def load_law(frac=1, scaler=True):
     datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
 
 
-    return datamat
-
-
-def load_adult2(frac=1, scaler=True):
-    '''
-    ['workclass_num', 'education.num', 'marital_num', 'race_num', 'sex_num', 'rel_num', 'capital.gain', 'capital.loss']
-    '''
-
-    ADULT_TRAIN_FILE = 'datasets/adult.data'
-    ADULT_TEST_FILE = 'datasets/adult.test'
-
-    names = ['age', 'workclass', 'fnlwgt', 'education', 'education.num', 'marital.status', 'occupation', 'relationship',
-     'race', 'sex', 'capital.gain', 'capital.loss', 'hours.per.week', 'native.country', 'income']
-
-    data = pd.read_csv(
-            ADULT_TRAIN_FILE,
-            names = names, skipinitialspace=True
-                )
-
-    data_test = pd.read_csv(
-            ADULT_TEST_FILE,
-            names=names, skipinitialspace=True
-        )
-    # print(data_test.head())
-    data = pd.concat([data, data_test])
-    data = data[data["occupation"] != '?']
-    data = data[data["native.country"] != '?']
-    data = data[data["workclass"] != '?']
-
-
-
-    # create numerical columns representing the categorical data
-    data['workclass_num'] = data.workclass.map({'Private':0, 'State-gov':1, 'Federal-gov':2, 'Self-emp-not-inc':3, 'Self-emp-inc':4, 'Local-gov':5, 'Without-pay':6})
-    data['over50K'] = np.where(data.income == '<=50K', 0.0, 1.0)
-    data['marital_num'] = data['marital.status'].map({'Widowed':0, 'Divorced':1, 'Separated':2, 'Never-married':3, 'Married-civ-spouse':4, 'Married-AF-spouse':4, 'Married-spouse-absent':5})
-    print(type(data.race.map({'Black':0.0, 'White':1.0, 'Asian-Pac-Islander':2.0, 'Amer-Indian-Eskimo':3.0, 'Other':4.0})))
-    data['race_num'] = data.race.map({'Black':0, 'White':1, 'Asian-Pac-Islander':2, 'Amer-Indian-Eskimo':3, 'Other':4})
-    data['sex_num'] = np.where(data.sex == 'Female', 0, 1)
-    data['rel_num'] = data.relationship.map({'Not-in-family':0, 'Unmarried':0, 'Own-child':0, 'Other-relative':0, 'Husband':1, 'Wife':1})
-
-    data = data[data['race_num'] < 2]
-
-    print(data.values.shape)
-
-
-    X = data[['workclass_num', 'education.num', 'marital_num', 'race_num', 'sex_num', 'rel_num', 'capital.gain', 'capital.loss']]
-    y = data.over50K
-
-    datamat = np.concatenate([X, y[:, np.newaxis]], axis=1)
-    datamat = np.random.permutation(datamat)
-    datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
-    print(datamat.shape)
     return datamat
 
 
