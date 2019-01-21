@@ -203,58 +203,56 @@ def load_law(frac=1, scaler=True):
     return datamat
 
 
-# def load_adult(frac=1, scaler=True):
-#     '''
-#     ['workclass_num', 'education.num', 'marital_num', 'race_num', 'sex_num', 'rel_num', 'capital.gain', 'capital.loss']
-#     '''
-#
-#     ADULT_TRAIN_FILE = 'datasets/adult.data'
-#     ADULT_TEST_FILE = 'datasets/adult.test'
-#
-#     names = ['age', 'workclass', 'fnlwgt', 'education', 'education.num', 'marital.status', 'occupation', 'relationship',
-#      'race', 'sex', 'capital.gain', 'capital.loss', 'hours.per.week', 'native.country', 'income']
-#
-#     data = pd.read_csv(
-#             ADULT_TRAIN_FILE,
-#             names = names, skipinitialspace=True
-#                 )
-#
-#     data_test = pd.read_csv(
-#             ADULT_TEST_FILE,
-#             names=names, skipinitialspace=True
-#         )
-#     # print(data_test.head())
-#     data = pd.concat([data, data_test])
-#     data = data[data["occupation"] != '?']
-#     data = data[data["native.country"] != '?']
-#     data = data[data["workclass"] != '?']
-#     data = data[data["race"] != 'Asian-Pac-Islander']
-#     data = data[data["race"] != 'Amer-Indian-Eskimo']
-#     data = data[data["race"] != 'Other']
-#
-#
-#     # create numerical columns representing the categorical data
-#     data['workclass_num'] = data.workclass.map({'Private':0.0, 'State-gov':1.0, 'Federal-gov':2.0, 'Self-emp-not-inc':3.0, 'Self-emp-inc':4.0, 'Local-gov':5.0, 'Without-pay':6.0})
-#     data['over50K'] = np.where(data.income == '<=50K', 0.0, 1.0)
-#     data['marital_num'] = data['marital.status'].map({'Widowed':0.0, 'Divorced':1.0, 'Separated':2.0, 'Never-married':3.0, 'Married-civ-spouse':4.0, 'Married-AF-spouse':4.0, 'Married-spouse-absent':5.0})
-#
-#     data['race_num'] = data.race.map({'Black':0.0, 'White':1.0, 'Asian-Pac-Islander':2.0, 'Amer-Indian-Eskimo':3.0, 'Other':4.0})
-#     data['sex_num'] = np.where(data.sex == 'Female', 0.0, 1.0)
-#     data['rel_num'] = data.relationship.map({'Not-in-family':0.0, 'Unmarried':0.0, 'Own-child':0.0, 'Other-relative':0.0, 'Husband':1.0, 'Wife':1.0})
-#
-#     data = data[data['race_num'] < 2]
-#
-#     print(data.values.shape)
-#
-#
-#     X = data[['workclass_num', 'education.num', 'marital_num', 'race_num', 'sex_num', 'rel_num', 'capital.gain', 'capital.loss']]
-#     y = data.over50K
-#
-#     datamat = np.concatenate([X, y[:, np.newaxis]], axis=1)
-#     datamat = np.random.permutation(datamat)
-#     datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
-#
-#     return datamat
+def load_adult2(frac=1, scaler=True):
+    '''
+    ['workclass_num', 'education.num', 'marital_num', 'race_num', 'sex_num', 'rel_num', 'capital.gain', 'capital.loss']
+    '''
+
+    ADULT_TRAIN_FILE = 'datasets/adult.data'
+    ADULT_TEST_FILE = 'datasets/adult.test'
+
+    names = ['age', 'workclass', 'fnlwgt', 'education', 'education.num', 'marital.status', 'occupation', 'relationship',
+     'race', 'sex', 'capital.gain', 'capital.loss', 'hours.per.week', 'native.country', 'income']
+
+    data = pd.read_csv(
+            ADULT_TRAIN_FILE,
+            names = names, skipinitialspace=True
+                )
+
+    data_test = pd.read_csv(
+            ADULT_TEST_FILE,
+            names=names, skipinitialspace=True
+        )
+    # print(data_test.head())
+    data = pd.concat([data, data_test])
+    data = data[data["occupation"] != '?']
+    data = data[data["native.country"] != '?']
+    data = data[data["workclass"] != '?']
+
+
+
+    # create numerical columns representing the categorical data
+    data['workclass_num'] = data.workclass.map({'Private':0, 'State-gov':1, 'Federal-gov':2, 'Self-emp-not-inc':3, 'Self-emp-inc':4, 'Local-gov':5, 'Without-pay':6})
+    data['over50K'] = np.where(data.income == '<=50K', 0.0, 1.0)
+    data['marital_num'] = data['marital.status'].map({'Widowed':0, 'Divorced':1, 'Separated':2, 'Never-married':3, 'Married-civ-spouse':4, 'Married-AF-spouse':4, 'Married-spouse-absent':5})
+    print(type(data.race.map({'Black':0.0, 'White':1.0, 'Asian-Pac-Islander':2.0, 'Amer-Indian-Eskimo':3.0, 'Other':4.0})))
+    data['race_num'] = data.race.map({'Black':0, 'White':1, 'Asian-Pac-Islander':2, 'Amer-Indian-Eskimo':3, 'Other':4})
+    data['sex_num'] = np.where(data.sex == 'Female', 0, 1)
+    data['rel_num'] = data.relationship.map({'Not-in-family':0, 'Unmarried':0, 'Own-child':0, 'Other-relative':0, 'Husband':1, 'Wife':1})
+
+    data = data[data['race_num'] < 2]
+
+    print(data.values.shape)
+
+
+    X = data[['workclass_num', 'education.num', 'marital_num', 'race_num', 'sex_num', 'rel_num', 'capital.gain', 'capital.loss']]
+    y = data.over50K
+
+    datamat = np.concatenate([X, y[:, np.newaxis]], axis=1)
+    datamat = np.random.permutation(datamat)
+    datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
+    print(datamat.shape)
+    return datamat
 
 
 
@@ -325,8 +323,33 @@ def load_adult(frac=1, scaler=True):
     data = data[data["race"] != 'Asian-Pac-Islander']
     data = data[data["race"] != 'Amer-Indian-Eskimo']
     data = data[data["race"] != 'Other']
-    print(len(data))
 
+
+
+    # def edu_(data):
+    #     data.loc[data['education'] == "Preschool",'education'] = 0
+    #     data.loc[data['education'] == "1st-4th",'education'] = 1
+    #     data.loc[data['education'] == "1st-4th",'education'] = 2
+    #     data.loc[data['education'] == "5th-6th",'education'] = 3
+    #     data.loc[data['education'] == "7th-8th",'education'] = 4
+    #     data.loc[data['education'] == "9th",'education'] = 5
+    #     data.loc[data['education'] == "10th",'education'] = 6
+    #     data.loc[data['education'] == "11th",'education'] = 7
+    #     data.loc[data['education'] == "12th",'education'] = 8
+    #     data.loc[data['education'] == "HS-grad",'education'] = 9
+    #     data.loc[data['education'] == "Prof-school",'education'] = 10
+    #     data.loc[data['education'] == "Some-college",'education'] = 11
+    #     data.loc[data['education'] == "Assoc-acdm",'education'] = 12
+    #     data.loc[data['education'] == "Assoc-voc",'education'] = 13
+    #     data.loc[data['education'] == "Bachelors",'education'] = 14
+    #     data.loc[data['education'] == "Masters",'education'] = 15
+    #     data.loc[data['education'] == "Doctorate",'education'] = 16
+    #
+    #     return data
+
+    # data = edu_(data)
+
+    #print(data['education'])
     # Here we apply discretisation on column marital_status
     data.replace(['Divorced', 'Married-AF-spouse',
                   'Married-civ-spouse', 'Married-spouse-absent',
@@ -341,7 +364,7 @@ def load_adult(frac=1, scaler=True):
         data[col] = c
     datamat = data.values
 
-    datamat = np.random.permutation(datamat)
+
 
     target = datamat[:, -1]
     datamat = datamat[:, :-1]
@@ -352,11 +375,10 @@ def load_adult(frac=1, scaler=True):
         datamat = scaler.transform(datamat)
 
     datamat = np.concatenate([datamat, target[:, np.newaxis]], axis=1)
-
+    datamat = np.random.permutation(datamat)
     print('The dataset is loaded...')
     datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
 
-    print(datamat[0])
 
     return datamat
 
@@ -526,7 +548,7 @@ def load_bank(frac=1):
         singles                11162 non-null int64
         divorced               11162 non-null int64
     '''
-    data = pd.read_csv('datasets/bank-full.csv',sep=';',header='infer', skipinitialspace=True)
+    data = pd.read_csv('datasets/bank.csv',sep=';',header='infer', skipinitialspace=True)
     print(data.info())
 
 
