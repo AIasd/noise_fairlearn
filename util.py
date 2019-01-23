@@ -279,7 +279,7 @@ def denoiseA(data_cor, rho, mode):
 
 def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, learner_name='lsq', mode='four', verbose=False):
     '''
-    dataset: one of ['compas', 'bank', 'adult', 'adultr', 'law', 'german']
+    dataset: one of ['compas', 'bank', 'adult', 'law', 'german']. Default is 'compas'.
     rho: [a, b] where a, b in interval [0,0.5]
     frac: real number in interval [0, 1]. The fraction of the data points in chosen dataset to use.
     eps_list: a list of non-negative real numbers
@@ -308,11 +308,7 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     sensible_feature = None
     learner = None
     print('input dataset:', dataset)
-    if dataset == 'adultr':
-        datamat = load_adult(frac)
-        sensible_name = 'race'
-        sensible_feature = 8
-    elif dataset == 'adult':
+    if dataset == 'adult':
         datamat = load_adult(frac)
         sensible_name = 'gender'
         sensible_feature = 9
