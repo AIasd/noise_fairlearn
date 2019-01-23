@@ -9,9 +9,7 @@ This repo implements a general interface for noisy fair binary classification. I
 
 ### classifiers:
 
-* Zafar
 * Agarwal
-* Shai (will ignore the epsilon value passed because epsilon=0 is inherent in the implementation)
 
 ### datasets:
 
@@ -22,10 +20,10 @@ This repo implements a general interface for noisy fair binary classification. I
  * Law School
 
 ## Usage
+Directly use demo.ipynb or run
 ```
 python3 run_experiment.py --dataset compas --rho-plus 0.2 --rho-minus 0.2 --frac 1 --criteria DP --classifier Agarwal --trials 3 --plot-result
 ```
-or directly use demo.ipynb.
 
 ## Reference
 Code is modified on top of code in the following repos:
@@ -38,4 +36,5 @@ files in fairlearn are modified from:
 
 <https://github.com/Microsoft/fairlearn>
 
-<https://github.com/mbilalzafar/fair-classification>
+files in fairERM are modified from:
+<https://github.com/jmikko/fair_ERM>

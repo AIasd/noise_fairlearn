@@ -1,5 +1,5 @@
 '''
-This file contains code for preprocessing/loading adult/compas dataset
+This file contains code for preprocessing/loading datasets
 
 Code for loading German Credit Risk dataset is modified from:
 https://www.kaggle.com/kabure/predicting-credit-risk-model-pipeline
@@ -12,16 +12,20 @@ https://github.com/mbilalzafar/fair-classification/blob/master/disparate_mistrea
 
 Code for loading Bank Marketing dataset is modified from:
 https://www.kaggle.com/mayurjain/ml-bank-marketing-solution
+
+Original Law School Dataset at:
+https://slack-redir.net/link?url=https%3A%2F%2Fweb.archive.org%2Fweb%2F20160611132146%2Fhttp%3A%2F%2Fwww2.law.ucla.edu%2Fsander%2FSystemic%2FData.htm
+The original dataset is extremely unbalanced. We randomly remove many positive samples.
 '''
+import os
+from random import seed, shuffle
+
 import numpy as np
 import pandas as pd
 import sklearn.preprocessing as preprocessing
 from sklearn.preprocessing import StandardScaler
 
-import urllib.request as url
 
-from random import seed, shuffle
-import os
 
 
 SEED = 1122334455
@@ -101,8 +105,6 @@ def load_german(frac=1, scaler=True):
 
     df_credit['Credit amount'] = np.log(df_credit['Credit amount'])
 
-
-
     datamat = df_credit.drop('Risk_bad', 1).values
     target = df_credit["Risk_bad"].values
     A = np.copy(datamat[:, 11])
@@ -113,7 +115,6 @@ def load_german(frac=1, scaler=True):
         datamat = scaler.transform(datamat)
 
     datamat[:, 11] = A
-
 
     datamat = np.concatenate([datamat, target[:, np.newaxis]], axis=1)
     datamat = np.random.permutation(datamat)
@@ -131,10 +132,15 @@ def load_law(frac=1, scaler=True):
     'racetxt' can have values {'Hispanic', 'American Indian / Alaskan Native', 'Black', 'White', 'Other', 'Asian'}
     '''
     LAW_FILE = 'datasets/law_data_clean.csv'
-    # names = ['decile1b', 'decile3', 'lsat', 'ugpa', 'zfygpa', 'zgpa', 'fulltime', 'fam_inc', 'male', 'pass_bar', 'tier', 'racetxt']
     data = pd.read_csv(LAW_FILE)
 
+    # Switch two columns to make the target label the last column.
+    cols = data.columns.tolist()
+    cols = cols[:9]+cols[11:]+cols[10:11]+cols[9:10]
+    data = data[cols]
+
     data = data.loc[data['racetxt'].isin(['White', 'Black'])]
+
     # Here we apply discretisation on column marital_status
     # data.replace(['Hispanic', 'American Indian / Alaskan Native',
     #               'Black', 'Other', 'Asian'],
@@ -147,20 +153,19 @@ def load_law(frac=1, scaler=True):
     for col in category_col:
         b, c = np.unique(data[col], return_inverse=True)
         data[col] = c
+
     datamat = data.values
 
-    # datamat[:, 9], datamat[:, 11] = datamat[:, 11], datamat[:, 9]
-
-    temp = np.copy(datamat[:, 11])
-    datamat[:, 11] = datamat[:, 9]
-    datamat[:, 9] = temp
+    # # Switch two columns to make the target label the last column.
+    # temp = np.copy(datamat[:, 11])
+    # datamat[:, 11] = datamat[:, 9]
+    # datamat[:, 9] = temp
 
 
     datamat = datamat[datamat[:,9].argsort()]
     datamat = datamat[:int(len(datamat)/5)]
 
 
-    datamat = np.random.permutation(datamat)
     A = np.copy(datamat[:, 9])
 
 
@@ -176,9 +181,7 @@ def load_law(frac=1, scaler=True):
     datamat[:, 9] = A
 
     datamat = np.concatenate([datamat, target[:, np.newaxis]], axis=1)
-
-    print('The dataset is loaded...')
-
+    datamat = np.random.permutation(datamat)
     datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
 
 
@@ -254,32 +257,6 @@ def load_adult(frac=1, scaler=True):
     data = data[data["race"] != 'Amer-Indian-Eskimo']
     data = data[data["race"] != 'Other']
 
-
-
-    # def edu_(data):
-    #     data.loc[data['education'] == "Preschool",'education'] = 0
-    #     data.loc[data['education'] == "1st-4th",'education'] = 1
-    #     data.loc[data['education'] == "1st-4th",'education'] = 2
-    #     data.loc[data['education'] == "5th-6th",'education'] = 3
-    #     data.loc[data['education'] == "7th-8th",'education'] = 4
-    #     data.loc[data['education'] == "9th",'education'] = 5
-    #     data.loc[data['education'] == "10th",'education'] = 6
-    #     data.loc[data['education'] == "11th",'education'] = 7
-    #     data.loc[data['education'] == "12th",'education'] = 8
-    #     data.loc[data['education'] == "HS-grad",'education'] = 9
-    #     data.loc[data['education'] == "Prof-school",'education'] = 10
-    #     data.loc[data['education'] == "Some-college",'education'] = 11
-    #     data.loc[data['education'] == "Assoc-acdm",'education'] = 12
-    #     data.loc[data['education'] == "Assoc-voc",'education'] = 13
-    #     data.loc[data['education'] == "Bachelors",'education'] = 14
-    #     data.loc[data['education'] == "Masters",'education'] = 15
-    #     data.loc[data['education'] == "Doctorate",'education'] = 16
-    #
-    #     return data
-
-    # data = edu_(data)
-
-    #print(data['education'])
     # Here we apply discretisation on column marital_status
     data.replace(['Divorced', 'Married-AF-spouse',
                   'Married-civ-spouse', 'Married-spouse-absent',
@@ -337,9 +314,6 @@ def load_compas(frac=1):
 
 
     COMPAS_INPUT_FILE = dir+os.sep+"compas-scores-two-years.csv"
-    # addr = "https://raw.githubusercontent.com/propublica/compas-analysis/master/compas-scores-two-years.csv"
-
-    # check_data_file(COMPAS_INPUT_FILE, addr)
 
     # load the data and get some stats
     df = pd.read_csv(COMPAS_INPUT_FILE)
@@ -378,16 +352,12 @@ def load_compas(frac=1):
 
 
     """ Feature normalization and one hot encoding """
-
     # convert class label 0 to -1
     y = data[CLASS_FEATURE]
-    # y[y==0] = -1
 
-
-
-    print("\nNumber of people recidivating within two years")
-    print(pd.Series(y).value_counts())
-    print("\n")
+    # print("\nNumber of people recidivating within two years")
+    # print(pd.Series(y).value_counts())
+    # print("\n")
 
 
     X = np.array([]).reshape(len(y), 0) # empty array with num rows same as num examples, will hstack the features to it
@@ -405,8 +375,6 @@ def load_compas(frac=1):
             lb = preprocessing.LabelBinarizer()
             lb.fit(vals)
             vals = lb.transform(vals)
-
-
 
 
         # add to learnable features
@@ -434,7 +402,7 @@ def load_compas(frac=1):
 
     feature_names = ["intercept"] + feature_names
     assert(len(feature_names) == X.shape[1])
-    print("Features we will be using for classification are:", feature_names, "\n")
+    # print("Features we will be using for classification are:", feature_names, "\n")
 
     datamat = np.concatenate([X, y[:, np.newaxis]], axis=1)
 
@@ -481,10 +449,7 @@ def load_bank(frac=1):
     data = pd.read_csv('datasets/bank.csv',sep=',',header='infer', skipinitialspace=True)
     print(data.info())
 
-
     data = data.drop(['day','poutcome'],axis=1)
-
-
 
     def binaryType_(data):
 
@@ -620,7 +585,5 @@ def load_bank(frac=1):
     datamat = np.concatenate([data_X.values, data_y.values], axis=1)
     datamat = np.random.permutation(datamat)
     datamat = datamat[:int(np.floor(len(datamat)*frac)), :]
-
-
 
     return datamat

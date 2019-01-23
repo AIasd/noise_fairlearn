@@ -1,14 +1,17 @@
-import numpy as np
+'''
+Run a chosen fair classifier on chosen a dataset and store the experiment's results.
+'''
 
 import os
 import argparse
 from random import seed
 
+import numpy as np
+
 from util import experiment, plot
 
-
 SEED = 1122334455
-seed(SEED) # set the random seed so that the random permutations can be reproduced again
+seed(SEED)
 np.random.seed(SEED)
 
 log_dir = 'experiment_log/'

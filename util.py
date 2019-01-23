@@ -1,5 +1,5 @@
 '''
-This file contains multiple functions that convert data to appropriate format, invoke code in Agarwal classifier/Zafar classifier and plot according to results.
+This file contains multiple functions that convert data to appropriate format, invoke code of fair classifiers and plot the results.
 '''
 import numpy as np
 import pandas as pd
@@ -10,7 +10,6 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
-
 
 from cleanlab.classification import LearningWithNoisyLabels
 
@@ -42,7 +41,9 @@ sys.path.insert(0, 'fairERM/')
 from linear_ferm import Linear_FERM
 
 
-
+'''
+A list of base classifiers that can be used by Agarwal's method.
+'''
 class LeastSquaresLearner:
     def __init__(self):
         self.weights = None
@@ -94,9 +95,8 @@ class SVM:
             return pd.Series(pred)
 
 
-
 SEED = 1122334455
-seed(SEED) # set the random seed so that the random permutations can be reproduced again
+seed(SEED)
 np.random.seed(SEED)
 
 
@@ -105,13 +105,10 @@ keys = ["disp_train", "disp_test", "error_train", "error_test"]
 
 
 
-
 def change_format(dataset_train, dataset_test, sensible_feature, include_sensible):
     '''
     Change data format into that needed for Agarwal classifier. More preprocessing will be needed if Zafar's classifier gets used.
     '''
-
-
     d_train = dict()
     d_test = dict()
 
@@ -120,7 +117,6 @@ def change_format(dataset_train, dataset_test, sensible_feature, include_sensibl
             d_train[i] = dataset_train.data[:, i]
             d_test[i] = dataset_test.data[:, i]
 
-
     dataX = pd.DataFrame(d_train)
     dataY = pd.Series(dataset_train.target)
 
@@ -128,16 +124,12 @@ def change_format(dataset_train, dataset_test, sensible_feature, include_sensibl
     dataA[dataA>0] = 1
     dataA[dataA<=0] = 0
 
-
-
     dataX_test = pd.DataFrame(d_test)
     dataY_test = pd.Series(dataset_test.target)
-
 
     dataA_test = pd.Series(dataset_test.data[:, sensible_feature])
     dataA_test[dataA_test>0] = 1
     dataA_test[dataA_test<=0] = 0
-
 
     return [dataX, dataY, dataA, dataX, dataY, dataA, dataX_test, dataY_test, dataA_test]
 
@@ -149,13 +141,10 @@ def permute_and_split(datamat, permute=True, train_ratio=0.8):
     if permute:
         datamat = np.random.permutation(datamat)
 
-
     cutoff = int(np.floor(len(datamat)*train_ratio))
 
     dataset_train = namedtuple('_', 'data, target')(datamat[:cutoff, :-1], datamat[:cutoff, -1])
     dataset_test = namedtuple('_', 'data, target')(datamat[cutoff:, :-1], datamat[cutoff:, -1])
-
-
 
     return dataset_train, dataset_test
 
@@ -167,6 +156,7 @@ def corrupt(dataA, dataY, rho, creteria):
     '''
     rho_a_plus, rho_a_minus = rho
 
+    print('The number of data points belonging to each group:')
     print('before corruption:', np.sum(dataA==0), np.sum(dataA==1))
     for i in range(len(dataA)):
         rand = np.random.random()
@@ -182,6 +172,9 @@ def corrupt(dataA, dataY, rho, creteria):
 
 
 def estimate_alpha_beta(cor_dataA, dataY, rho, creteria):
+    '''
+    Estimate alpha and beta using rho and pi_a_corr.
+    '''
     rho_a_plus, rho_a_minus = rho
     if (1 - rho_a_plus - rho_a_minus) < 0:
         print('before', rho_a_plus, rho_a_minus)
@@ -197,7 +190,7 @@ def estimate_alpha_beta(cor_dataA, dataY, rho, creteria):
         pi_a_corr = np.mean([1.0 if a > 0 else 0.0 for a in cor_dataA])
 
 
-    # To correct wrong estimation
+    # To correct wrong estimation. pi_a cannot be negative
     rho_a_minus = np.min([pi_a_corr, rho_a_minus])
 
     pi_a = (pi_a_corr - rho_a_minus)/(1 - rho_a_plus - rho_a_minus)
@@ -206,39 +199,35 @@ def estimate_alpha_beta(cor_dataA, dataY, rho, creteria):
     beta_a = pi_a*rho_a_plus / (1-pi_a_corr)
 
     if (1 - alpha_a - beta_a) < 0:
-        print('the sum of alpha_a and beta_a is too large.', alpha_a, beta_a)
-        alpha_a, beta_a = 0.49, 0.49
+        print('The sum of alpha_a and beta_a is too large.', alpha_a, beta_a)
+        print('We scale down them.')
+        coeff = alpha_a+beta_a
+        alpha_a = 0.95 * alpha_a / coeff
+        beta_a = 0.95 * beta_a / coeff
 
     return alpha_a, beta_a
 
 
-
-
-
-def scale_eps(eps, alpha_a, beta_a):
-
-    # new_eps = None
-    # if creteria == 'DP':
-    #     new_eps = eps * (1-alpha_a-beta_a)
-    # elif creteria == 'EO':
-    #     alpha_a_p = alpha_a*p_01 / ((1-alpha_a)*p_11 + alpha_a*p_01)
-    #     beta_a_p = beta_a*p_11 / ((1-beta_a)*p_01 + beta_a*p_11)
-    #     # print('alpha_a_p:', alpha_a_p, 'beta_a_p:',  beta_a_p)
-    #     new_eps =  eps * (1-alpha_a_p-beta_a_p)
-
+def _scale_eps(eps, alpha_a, beta_a):
+    '''
+    Scale down epsilon.
+    '''
     return eps * (1 - alpha_a - beta_a)
 
 
 
 def denoiseA(data_cor, rho, mode):
+    '''
+    Denoise the corrupted sensitive attribute using RankPrune.
+    '''
 
     rho_a_plus, rho_a_minus = rho
 
     dataX = data_cor[0]
     cor_dataA = data_cor[2]
-    dataA = data_cor[5]
-
-    auc3, auc4 = None, None
+    # dataA = data_cor[5]
+    #
+    # auc3, auc4 = None, None
 
     lnl = LearningWithNoisyLabels(clf=LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
     noise_matrix = np.array([[1-rho_a_minus, rho_a_plus],[rho_a_minus, 1-rho_a_plus]])
@@ -248,10 +237,17 @@ def denoiseA(data_cor, rho, mode):
     data_denoised = copy.deepcopy(data_cor)
     data_denoised[2] = denoised_dataA
 
-    print(lnl.noise_matrix, rho_a_plus, rho_a_minus)
+    # print(lnl.noise_matrix, rho_a_plus, rho_a_minus)
 
+    # Check recovery accuracy
+    # auc1 = np.mean(dataA.values==cor_dataA.values)
+    # auc2 = np.mean(dataA.values==denoised_dataA.values)
+
+
+    # The following is under development.
     rho_est = None
     data_denoised_est = None
+
 
     if mode == 'six':
 
@@ -266,49 +262,52 @@ def denoiseA(data_cor, rho, mode):
         rho_a_minus_est = lnl2.noise_matrix[1][0]
         rho_est = [rho_a_plus_est, rho_a_minus_est]
 
-        print(lnl2.noise_matrix, rho_a_plus_est, rho_a_minus_est)
+        # print(lnl2.noise_matrix, rho_a_plus_est, rho_a_minus_est)
 
 
         lnl3 = LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
         lnl3.fit(dataX.values, cor_dataA.values)
-        pred_dataA = pd.Series(lnl3.predict(dataX.values))
 
+        # pred_dataA = pd.Series(lnl3.predict(dataX.values))
+        # auc3 = np.mean(dataA.values==denoised_dataA_est.values)
+        # auc4 = np.mean(dataA.values==pred_dataA.values)
 
-        auc3 = np.mean(dataA.values==denoised_dataA_est.values)
-        auc4 = np.mean(dataA.values==pred_dataA.values)
-
-    # Check recovery accuracy
-    auc1 = np.mean(dataA.values==cor_dataA.values)
-    auc2 = np.mean(dataA.values==denoised_dataA.values)
-
-
-    print('auc:', auc1, auc2, auc3, auc4)
-
+    # print('auc:', auc1, auc2, auc3, auc4)
 
     return data_denoised, data_denoised_est, rho_est
 
 
 def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, learner_name='lsq', mode='four', verbose=False):
     '''
-    dataset: one of ['compas', 'adult', 'adultr']
+    dataset: one of ['compas', 'bank', 'adult', 'adultr', 'law', 'german']
     rho: [a, b] where a, b in interval [0,0.5]
-    frac: real number in interval [0,1]. The fraction of the data points in chosen dataset to use.
+    frac: real number in interval [0, 1]. The fraction of the data points in chosen dataset to use.
     eps_list: a list of non-negative real numbers
     criteria: one of ['DP','EO']
-    classifier: one of ['Agarwal', 'Zafar', 'Shai']. Zafar is the fastest.
-                Shai will ignore eps_list since eps=0 is inherent in this implementation.
-    trials: the number of trials to run
-    include_sensible: boolean. If to include sensitive attribute as a feature for optimizing the oroginal loss. Note that even
-                      if this is set to False, sensitive attribute will still be used for constraint(s).
+    classifier: one of ['Agarwal', 'Zafar']. Agarwal is the default.
+    trials: the number of trials to run.
+    include_sensible: boolean. If to include sensitive attribute as a feature for optimizing the oroginal loss. This is used only for debugging purpose. It is hard-coded to be False now.
     filename: the file name to store the log of experiment(s).
-    learner_name: ['lsq', 'LR', 'SVM']. SVM is very slow. lsq does not work for law school dataset.
-    mode: ['four', 'six']
+    learner_name: ['lsq', 'LR', 'SVM']. SVM is the slowest. lsq does not work for law school dataset but it works reasonally well on all other datasets.
+    mode: ['four']. Currently, we only support four.
     verbose: boolean. If print out info at each run.
     '''
+
+    # We hard-code mode and classifier.
+    mode = 'four'
+
+    # classifier
+    if classifier not in ['Agarwal', 'Zafar']:
+        classifier = 'Agarwal'
+
+    # We hard-code include_sensible to False.
+    include_sensible = False
+
+
     sensible_name = None
     sensible_feature = None
     learner = None
-    print(dataset)
+    print('input dataset:', dataset)
     if dataset == 'adultr':
         datamat = load_adult(frac)
         sensible_name = 'race'
@@ -344,7 +343,7 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     else:
         learner = LeastSquaresLearner()
 
-    print('learner_name', learner_name)
+    print('learner_name:', learner_name)
 
 
     if criteria == 'EO':
@@ -353,11 +352,14 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
         tests = [{"cons_class": moments.DP, "eps": eps} for eps in eps_list]
 
     all_data = _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, criteria, classifier, include_sensible, learner, mode, verbose)
-    save_all_data(filename, all_data, eps_list)
+    _save_all_data(filename, all_data, eps_list)
 
     return all_data
 
 def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, creteria, classifier, include_sensible, learner, mode, verbose):
+    '''
+    Internal rountine of running experiment. Run experiments under different settings using different algorithms and collect the results returned by the invoked fair classifiers.
+    '''
 
     if mode == 'six':
         n = 6
@@ -374,9 +376,6 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
 
         dataY = data_nocor[1]
         dataA = data_nocor[2]
-
-
-
         cor_dataA = dataA.copy()
         data_cor = copy.deepcopy(data_nocor)
 
@@ -396,23 +395,23 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
             eps_0 = test_0['eps']
             test = copy.deepcopy(test_0)
 
-            res_cor = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
+            res_cor = _run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
-            res_nocor = run_test(test, data_nocor, sensible_name, learner,  creteria, verbose, classifier)
+            res_nocor = _run_test(test, data_nocor, sensible_name, learner,  creteria, verbose, classifier)
 
-            res_denoised = run_test(test, data_denoised, sensible_name, learner,  creteria, verbose, classifier)
+            res_denoised = _run_test(test, data_denoised, sensible_name, learner,  creteria, verbose, classifier)
 
-            test['eps'] = scale_eps(eps_0, alpha_a, beta_a)
-            res_cor_scale = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
+            test['eps'] = _scale_eps(eps_0, alpha_a, beta_a)
+            res_cor_scale = _run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
             results = [res_cor, res_nocor, res_denoised, res_cor_scale]
 
             if mode == 'six':
-                test['eps'] = scale_eps(eps_0, alpha_a_est, beta_a_est)
-                res_cor_scale_est = run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
+                test['eps'] = _scale_eps(eps_0, alpha_a_est, beta_a_est)
+                res_cor_scale_est = _run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
 
                 test['eps'] = eps_0
-                res_denoised_est = run_test(test, data_denoised_est, sensible_name, learner, creteria, verbose, classifier)
+                res_denoised_est = _run_test(test, data_denoised_est, sensible_name, learner, creteria, verbose, classifier)
 
                 results = [res_cor, res_nocor, res_denoised, res_cor_scale, res_denoised_est, res_cor_scale_est]
 
@@ -423,14 +422,17 @@ def _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, cr
     return all_data
 
 
-def run_test(test, data, sensible_name, learner, creteria, verbose, classifier='Zafar'):
+def _run_test(test, data, sensible_name, learner, creteria, verbose, classifier='Zafar'):
+    '''
+    Run a single trial of experiment using a chosen classifier.
+    '''
     res = None
     if classifier == 'Agarwal':
-        res = run_test_Agarwal(test, data, sensible_name, learner, creteria)
+        res = _run_test_Agarwal(test, data, sensible_name, learner, creteria)
     elif classifier == 'Shai':
-        res = run_test_Shai(test, data, sensible_name, learner, creteria)
+        res = _run_test_Shai(test, data, sensible_name, learner, creteria)
     else:
-        res = run_test_Zafar(test, data, sensible_name, learner, creteria)
+        res = _run_test_Zafar(test, data, sensible_name, learner, creteria)
 
     if verbose:
         print("testing (%s, eps=%.5f)" % (test["cons_class"].short_name, test["eps"]))
@@ -442,8 +444,10 @@ def run_test(test, data, sensible_name, learner, creteria, verbose, classifier='
     return res
 
 
-def run_test_Shai(test, data, sensible_name, learner, creteria):
-    # Standard SVM -  Train an SVM using the training set
+def _run_test_Shai(test, data, sensible_name, learner, creteria):
+    '''
+    Invoking Shai's algorithm.
+    '''
     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
 
     param_grid = [{'C': [0.01, 0.1, 1.0], 'kernel': ['linear']}]
@@ -466,8 +470,10 @@ def run_test_Shai(test, data, sensible_name, learner, creteria):
     return res
 
 
-def run_test_Agarwal(test, data, sensible_name, learner, creteria):
-
+def _run_test_Agarwal(test, data, sensible_name, learner, creteria):
+    '''
+    Invoking Agarwal's algorithm.
+    '''
     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
 
     res_tuple = red.expgrad(dataX, dataA, dataY, learner,
@@ -491,9 +497,12 @@ def run_test_Agarwal(test, data, sensible_name, learner, creteria):
 
 
 
-def run_test_Zafar(test, data, sensible_name, learner, creteria):
+def _run_test_Zafar(test, data, sensible_name, learner, creteria):
+    '''
+    Invoking Zafar's algorithm.
+    '''
     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
-    x, y, x_control, x_train, y_train, x_control_train, x_test, y_test, x_control_test = convert_data_format_Zafar(data, sensible_name)
+    x, y, x_control, x_train, y_train, x_control_train, x_test, y_test, x_control_test = _convert_data_format_Zafar(data, sensible_name)
 
     w = None
     if creteria == 'EO':
@@ -545,7 +554,10 @@ def run_test_Zafar(test, data, sensible_name, learner, creteria):
 
 
 
-def convert_data_format_Zafar(data, sensible_name):
+def _convert_data_format_Zafar(data, sensible_name):
+    '''
+    Convert the data format to that used by Zafar's fair classifier's interface.
+    '''
     dataX, dataY, dataA, dataX_train, dataY_train, dataA_train, dataX_test, dataY_test, dataA_test = data
 
     x = dataX.values
@@ -567,13 +579,10 @@ def convert_data_format_Zafar(data, sensible_name):
     return x, y, x_control, x_train, y_train, x_control_train, x_test, y_test, x_control_test
 
 
-
-
-
-
-
-
-def summarize_stats(all_data, r=None):
+def _summarize_stats(all_data, r=None):
+    '''
+    Calculate mean/std over runs for each combination of testing/training error/fairness violation
+    '''
     n = len(all_data)
     curves_mean = [{k:None for k in keys} for _ in range(n)]
     curves_std = [{k:None for k in keys} for _ in range(n)]
@@ -593,14 +602,20 @@ def summarize_stats(all_data, r=None):
     return curves_mean, curves_std
 
 
-def save_all_data(filename, all_data, eps_list):
+def _save_all_data(filename, all_data, eps_list):
+    '''
+    Save the experiment's data into a file.
+    '''
     tmp_all_data = copy.deepcopy(all_data)
     tmp_all_data.extend([eps_list])
     with open(filename, 'wb') as handle:
         pickle.dump(tmp_all_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def restore_all_data(filename):
+def _restore_all_data(filename):
+    '''
+    Restore the experiment's data
+    '''
     with open(filename, 'rb') as handle:
         all_data = pickle.load(handle)
     eps_list = all_data[-1]
@@ -609,25 +624,21 @@ def restore_all_data(filename):
     return all_data, eps_list
 
 
-def plot(filename, ref_end=0.2, ref_line=[False, False, False, False], mode='contain_denoise', save=False):
+def plot(filename, ref_end=0.2, ref_line=[False, False, False, False], save=False):
     '''
     filename: str. The name of the file storing data used for plotting.
     ref_end: positive real number. the endding point of the ref line. It is only applicable when ref_line contains value True.
     ref_line: a list of booleans with length four. This controls if adding ref line to the generated graphs.
-    mode: str. If include denoise curves in the plot.
-    save: boolean. If save the plotted graphs.
+    save: boolean. If to save the plotted graphs.
     '''
     y_label = 'DDP'
-
     p_eo = re.compile('EO')
     if p_eo.search(filename):
         y_label = 'DEO'
 
+    all_data, eps_list = _restore_all_data(filename)
+    data = _summarize_stats(all_data)
 
-    all_data, eps_list = restore_all_data(filename)
-    data = summarize_stats(all_data)
-
-    keys = ["disp_train", "disp_test", "error_train", "error_test"]
     xlabels = ['$\\tau$' for _ in range(4)]
     ylabels = [y_label, y_label, 'Error%', 'Error%']
     leg_pos_list = ['upper left', 'upper left', 'lower left', 'lower left']
@@ -636,33 +647,24 @@ def plot(filename, ref_end=0.2, ref_line=[False, False, False, False], mode='con
         title_end = ''
         if 'train' in k:
             title_end = '(training)'
-        _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, mode, save, title_end)
+        _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, save, title_end)
 
 
-def _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, mode, save, title_end):
+def _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, save, title_end):
     '''
     Plot four graphs. Internal routine for plot
     '''
     curves_mean, curves_std = data
     labels = ['cor', 'nocor', 'denoise', 'cor_scale', 'cor_scale_est', 'denoise_est']
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
 
     fig, ax = plt.subplots()
 
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-
     # labels = ['cor', 'nocor', 'cor_scale']
     for stat, err, label, color in zip(curves_mean, curves_std, labels, colors):
-        if mode != 'contain_denoise':
-            if label != 'denoise' and label != 'denoise_est':
-                ax.errorbar(eps_list, stat[k], yerr=err[k], label=label.replace('_', ' '), color=color)
-        else:
-            ax.errorbar(eps_list, stat[k], yerr=err[k], label=label.replace('_', ' '))
+            ax.errorbar(eps_list, stat[k], yerr=err[k], label=label.replace('_', ' '), color=color)
     if ref:
-
-        lims = [0, ref_end]
-        lims2 = [0, ref_end]
-
-        ax.plot(lims, lims2, 'k-', alpha=0.75, zorder=0, color='grey', linestyle='dashed')
+        ax.plot([0, ref_end], [0, ref_end], 'k-', alpha=0.75, zorder=0, color='grey', linestyle='dashed')
 
     title_content = None
     try:
@@ -673,10 +675,9 @@ def _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, mode, save
         res = p.search(filename)
         dataset, rho_a_plus, rho_a_minus, creteria = res.group(1), res.group(2), res.group(3), res.group(4)
 
+        # Modify a bit name shown on the title for the following two datasets
         if dataset == 'law':
             dataset = 'Law'
-        elif dataset == 'adult':
-            dataset = 'adult'
         elif dataset == 'compas':
             dataset = 'COMPAS'
 

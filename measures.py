@@ -1,3 +1,7 @@
+'''
+Fair measure(DP/EO) for probabilistic predictions.
+'''
+
 import numpy as np
 
 def fair_measure(predictions, dataA, dataY, creteria):
