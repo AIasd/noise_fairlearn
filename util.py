@@ -229,9 +229,19 @@ def denoiseA(data_cor, rho, mode):
     #
     # auc3, auc4 = None, None
 
-    lnl = LearningWithNoisyLabels(clf=LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
+
+
     noise_matrix = np.array([[1-rho_a_minus, rho_a_plus],[rho_a_minus, 1-rho_a_plus]])
+    # noise_matrix = None
+
+    lnl = LearningWithNoisyLabels(clf=LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto'))
     lnl.fit(X = dataX.values, s = cor_dataA.values, noise_matrix=noise_matrix)
+
+
+    # Logistic Regression Baseline
+    # lnl = clf=LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
+    # lnl.fit(X = dataX.values, y = cor_dataA.values)
+
 
     denoised_dataA = pd.Series(lnl.predict(dataX.values))
     data_denoised = copy.deepcopy(data_cor)
@@ -265,8 +275,8 @@ def denoiseA(data_cor, rho, mode):
         # print(lnl2.noise_matrix, rho_a_plus_est, rho_a_minus_est)
 
 
-        lnl3 = LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
-        lnl3.fit(dataX.values, cor_dataA.values)
+        # lnl3 = LogisticRegression(random_state=0, solver = 'lbfgs', multi_class = 'auto')
+        # lnl3.fit(dataX.values, cor_dataA.values)
 
         # pred_dataA = pd.Series(lnl3.predict(dataX.values))
         # auc3 = np.mean(dataA.values==denoised_dataA_est.values)
@@ -277,19 +287,24 @@ def denoiseA(data_cor, rho, mode):
     return data_denoised, data_denoised_est, rho_est
 
 
-def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, include_sensible, filename, learner_name='lsq', mode='four', verbose=False):
+def experiment(dataset, frac, eval_objective, eps, rho_list, rho, eps_list, criteria, classifier, trials, include_sensible, filename, learner_name='lsq', mode='four', verbose=False):
     '''
     dataset: one of ['compas', 'bank', 'adult', 'law', 'german']. Default is 'compas'.
-    rho: [a, b] where a, b in interval [0,0.5]
     frac: real number in interval [0, 1]. The fraction of the data points in chosen dataset to use.
-    eps_list: a list of non-negative real numbers
+
+    eval_objective: ['test_rho_est_err', 'test_tau']
+    eps: a number specifying the wanted fairness level. Valid when eval_objective='test_rho_est_err'.
+    rho_list: a list of (rho_plut, rho_minus) pairs. Valid when eval_objective='test_rho_est_err'.
+    rho: [a, b] where a, b in interval [0,0.5].
+    eps_list: a list of non-negative real numbers. Valid when eval_objective='test_eps'.
+
     criteria: one of ['DP','EO']
     classifier: one of ['Agarwal', 'Zafar']. Agarwal is the default.
     trials: the number of trials to run.
     include_sensible: boolean. If to include sensitive attribute as a feature for optimizing the oroginal loss. This is used only for debugging purpose. It is hard-coded to be False now.
     filename: the file name to store the log of experiment(s).
     learner_name: ['lsq', 'LR', 'SVM']. SVM is the slowest. lsq does not work for law school dataset but it works reasonally well on all other datasets.
-    mode: ['four']. Currently, we only support four.
+    mode: ['four']. Currently, we only support four. Valid when eval_objective='test_eps'.
     verbose: boolean. If print out info at each run.
     '''
 
@@ -339,16 +354,86 @@ def experiment(dataset, rho, frac, eps_list, criteria, classifier, trials, inclu
     else:
         learner = LeastSquaresLearner()
 
+    print('eval_objective', eval_objective)
     print('learner_name:', learner_name)
 
+    if eval_objective == 'test_rho_est_err':
+        eps_list = [eps for _ in range(len(rho_list))]
 
     if criteria == 'EO':
         tests = [{"cons_class": moments.EO, "eps": eps} for eps in eps_list]
     else:
         tests = [{"cons_class": moments.DP, "eps": eps} for eps in eps_list]
 
-    all_data = _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, criteria, classifier, include_sensible, learner, mode, verbose)
-    _save_all_data(filename, all_data, eps_list)
+    if eval_objective == 'test_rho_est_err':
+        all_data = _experiment_est_error(datamat, tests, rho, rho_list, trials, sensible_name, sensible_feature, criteria, classifier, include_sensible, learner, mode, verbose)
+        _save_all_data(filename, all_data, rho_list)
+    else:
+        all_data = _experiment(datamat, tests, rho, trials, sensible_name, sensible_feature, criteria, classifier, include_sensible, learner, mode, verbose)
+        _save_all_data(filename, all_data, eps_list)
+
+    return all_data
+
+def _experiment_est_error(datamat, tests, real_rho, rho_list, trials, sensible_name, sensible_feature, creteria, classifier, include_sensible, learner, mode, verbose):
+    '''
+    Internal rountine of running experiment. Run experiments under different settings using different algorithms and collect the results returned by the invoked fair classifiers.
+    '''
+
+    n = 4
+    all_data = [{k:[[] for _ in range(trials)] for k in keys} for _ in range(n)]
+
+    start = time.time()
+
+    for i in range(trials):
+        print('trial:', i, 'time:', time.time()-start)
+        dataset_train, dataset_test = permute_and_split(datamat)
+        data_nocor = change_format(dataset_train, dataset_test, sensible_feature, include_sensible)
+
+        dataY = data_nocor[1]
+        dataA = data_nocor[2]
+
+        res_cor_cache = None
+        res_nocor_cache = None
+
+        for j in range(len(tests)):
+            rho = rho_list[j]
+            test_0 = tests[j]
+
+            cor_dataA = dataA.copy()
+            data_cor = copy.deepcopy(data_nocor)
+
+            corrupt(cor_dataA, data_nocor[1], real_rho, creteria)
+            data_cor[2] = cor_dataA
+
+
+            data_denoised, _, _ = denoiseA(data_cor, rho, mode)
+
+
+            alpha_a, beta_a = estimate_alpha_beta(cor_dataA, dataY, rho, creteria)
+
+            eps_0 = test_0['eps']
+            test = copy.deepcopy(test_0)
+
+            if j == 0:
+                res_cor = _run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
+                res_cor_cache = res_cor
+
+                res_nocor = _run_test(test, data_nocor, sensible_name, learner,  creteria, verbose, classifier)
+                res_nocor_cache = res_nocor
+            else:
+                res_cor = copy.deepcopy(res_cor_cache)
+                res_nocor = copy.deepcopy(res_nocor_cache)
+
+            res_denoised = _run_test(test, data_denoised, sensible_name, learner,  creteria, verbose, classifier)
+
+            test['eps'] = _scale_eps(eps_0, alpha_a, beta_a)
+            res_cor_scale = _run_test(test, data_cor, sensible_name, learner, creteria, verbose, classifier)
+
+            results = [res_cor, res_nocor, res_denoised, res_cor_scale]
+
+            for k in keys:
+                for j in range(n):
+                    all_data[j][k][i].append(results[j][k])
 
     return all_data
 
@@ -614,15 +699,16 @@ def _restore_all_data(filename):
     '''
     with open(filename, 'rb') as handle:
         all_data = pickle.load(handle)
-    eps_list = all_data[-1]
+    var_list = all_data[-1]
     all_data = all_data[:-1]
 
-    return all_data, eps_list
+    return all_data, var_list
 
 
-def plot(filename, ref_end=0.2, ref_line=[False, False, False, False], save=False):
+def plot(filename, eval_objective, ref_end=0.2, ref_line=[False, False, False, False], save=False):
     '''
     filename: str. The name of the file storing data used for plotting.
+    eval_objective:
     ref_end: positive real number. the endding point of the ref line. It is only applicable when ref_line contains value True.
     ref_line: a list of booleans with length four. This controls if adding ref line to the generated graphs.
     save: boolean. If to save the plotted graphs.
@@ -632,33 +718,48 @@ def plot(filename, ref_end=0.2, ref_line=[False, False, False, False], save=Fals
     if p_eo.search(filename):
         y_label = 'DEO'
 
-    all_data, eps_list = _restore_all_data(filename)
+    all_data, var_list = _restore_all_data(filename)
+
+
+    # var_list is rho_list when eval_objective = 'test_rho_est_err'
+    # var_list is eps_list when eval_objective = 'test_tau'
     data = _summarize_stats(all_data)
 
     xlabels = ['$\\tau$' for _ in range(4)]
     ylabels = [y_label, y_label, 'Error%', 'Error%']
     leg_pos_list = ['upper left', 'upper left', 'lower left', 'lower left']
+    if eval_objective == 'test_rho_est_err':
+        leg_pos_list = ['lower right', 'lower right', 'upper right', 'upper right']
+
+    if eval_objective == 'test_rho_est_err':
+        var_list = np.array(var_list)
+        if var_list[:, 1][-1] == 0:
+            var_list = np.array(var_list)[:, 0]
+        else:
+            var_list = np.array(var_list)[:, 1]
+        xlabels = ['$\\hat{\\rho}^-$' for _ in range(4)]
 
     for k, xl, yl, leg_pos, ref in zip(keys, xlabels, ylabels, leg_pos_list , ref_line):
         title_end = ''
         if 'train' in k:
             title_end = '(training)'
-        _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, save, title_end)
+        _plot(var_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, save, title_end)
 
 
-def _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, save, title_end):
+def _plot(var_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, save, title_end):
     '''
     Plot four graphs. Internal routine for plot
     '''
     curves_mean, curves_std = data
     labels = ['cor', 'nocor', 'denoise', 'cor_scale', 'cor_scale_est', 'denoise_est']
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+    linestyles = [':', ':', '--', '-']
 
     fig, ax = plt.subplots()
 
     # labels = ['cor', 'nocor', 'cor_scale']
-    for stat, err, label, color in zip(curves_mean, curves_std, labels, colors):
-            ax.errorbar(eps_list, stat[k], yerr=err[k], label=label.replace('_', ' '), color=color)
+    for stat, err, label, color, linestyle in zip(curves_mean, curves_std, labels, colors, linestyles):
+            ax.errorbar(var_list, stat[k], yerr=err[k], label=label.replace('_', ' '), color=color, linestyle=linestyle)
     if ref:
         ax.plot([0, ref_end], [0, ref_end], 'k-', alpha=0.75, zorder=0, color='grey', linestyle='dashed')
 
@@ -667,7 +768,7 @@ def _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, save, titl
         p0 = re.compile('all\_data\_(.*)\.pickle')
         save_file_content = p0.search(filename).group(1)
 
-        p = re.compile('all\_data\_([a-zA-Z]+),([0-9\.]+),([0-9\.]+),[0-9\.]+,([A-Z]{2}),[a-zA-Z]+,[0-9]+,[a-zA-Z]+\.pickle')
+        p = re.compile('all\_data\_([a-zA-Z]+),([0-9\.]+),([0-9\.]+),[0-9\.]+,([A-Z]{2}),[a-zA-Z]+,[0-9]+,[a-zA-Z]+,[\_a-zA-Z]+\.pickle')
         res = p.search(filename)
         dataset, rho_a_plus, rho_a_minus, creteria = res.group(1), res.group(2), res.group(3), res.group(4)
 
@@ -688,7 +789,7 @@ def _plot(eps_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, save, titl
     ax.set_ylabel(yl)
     plt.show()
 
-    save_dir = 'imgs/'
+    save_dir = 'new_imgs/'
     if not os.path.isdir(save_dir):
         os.mkdir(save_dir)
 
