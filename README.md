@@ -22,7 +22,7 @@ This repo implements a general interface for noisy fair binary classification. I
 ## Usage
 Directly use demo.ipynb or run
 ```
-python3 run_experiment.py --dataset compas --rho-plus 0.2 --rho-minus 0.2 --frac 1 --criteria DP --classifier Agarwal --trials 3 --plot-result
+python3 run_experiment.py --eval_objective test_tau --dataset compas --rho-plus 0.2 --rho-minus 0.2 --frac 1 --criteria DP --classifier Agarwal --trials 3 --plot-result
 ```
 
 ## Reference

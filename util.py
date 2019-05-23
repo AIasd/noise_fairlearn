@@ -292,7 +292,7 @@ def experiment(dataset, frac, eval_objective, eps, rho_list, rho, eps_list, crit
     dataset: one of ['compas', 'bank', 'adult', 'law', 'german']. Default is 'compas'.
     frac: real number in interval [0, 1]. The fraction of the data points in chosen dataset to use.
 
-    eval_objective: ['test_rho_est_err', 'test_tau']
+    eval_objective: ['test_tau', 'test_rho_est_err']. 'test_tau' runs experiments between tau and error/fairness violation. 'test_rho_est_err' runs experiments between the estimated rho and error/fairness violation.
     eps: a number specifying the wanted fairness level. Valid when eval_objective='test_rho_est_err'.
     rho_list: a list of (rho_plut, rho_minus) pairs. Valid when eval_objective='test_rho_est_err'.
     rho: [a, b] where a, b in interval [0,0.5].
@@ -729,7 +729,8 @@ def plot(filename, eval_objective, ref_end=0.2, ref_line=[False, False, False, F
     ylabels = [y_label, y_label, 'Error%', 'Error%']
     leg_pos_list = ['upper left', 'upper left', 'lower left', 'lower left']
     if eval_objective == 'test_rho_est_err':
-        leg_pos_list = ['lower right', 'lower right', 'upper right', 'upper right']
+        # leg_pos_list = ['lower right', 'lower right', 'upper right', 'upper right']
+        leg_pos_list = ['lower left', 'lower left', 'upper left', 'upper left']
 
     if eval_objective == 'test_rho_est_err':
         var_list = np.array(var_list)
@@ -754,12 +755,16 @@ def _plot(var_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, save, titl
     labels = ['cor', 'nocor', 'denoise', 'cor_scale', 'cor_scale_est', 'denoise_est']
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
     linestyles = [':', ':', '--', '-']
+    info_list = list(zip(curves_mean, curves_std, labels, colors, linestyles))
+    info_list[2], info_list[3] = info_list[3], info_list[2]
 
     fig, ax = plt.subplots()
-
+    # ax.set_ylim(0.1475, 0.156)
     # labels = ['cor', 'nocor', 'cor_scale']
-    for stat, err, label, color, linestyle in zip(curves_mean, curves_std, labels, colors, linestyles):
-            ax.errorbar(var_list, stat[k], yerr=err[k], label=label.replace('_', ' '), color=color, linestyle=linestyle)
+    for stat, err, label, color, linestyle in info_list:
+        ax.errorbar(var_list, stat[k], yerr=err[k]/np.sqrt(3), label=label.replace('_', ' '), color=color, linestyle=linestyle)
+
+        # ax.plot(var_list, stat[k], label=label.replace('_', ' '), color=color, linestyle=linestyle)
     if ref:
         ax.plot([0, ref_end], [0, ref_end], 'k-', alpha=0.75, zorder=0, color='grey', linestyle='dashed')
 
@@ -782,9 +787,19 @@ def _plot(var_list, data, k, xl, yl, leg_pos, filename, ref, ref_end, save, titl
 
     except TypeError:
         pass
+    handles,labels = ax.get_legend_handles_labels()
 
-    ax.legend(loc=leg_pos, framealpha=0.1)
+    if len(handles) == 3:
+        handles = [handles[0], handles[2], handles[1]]
+        labels = [labels[0], labels[2], labels[1]]
+    elif len(handles) == 4:
+        handles = [handles[0], handles[1], handles[3], handles[2]]
+        labels = [labels[0], labels[1], labels[3], labels[2]]
+
+    ax.legend(handles,labels,loc=leg_pos, framealpha=0.1)
     ax.set_title(title_content)
+    # if xl == '$\\hat{\\rho}^-$' and dataset == 'german':
+    #     xl == '$\\hat{\\rho}^+$'
     ax.set_xlabel(xl)
     ax.set_ylabel(yl)
     plt.show()
