@@ -112,3 +112,7 @@ dccp.log
 experiment_log
 exp*/
 imgs/
+datasets/raw_or_unused/*
+new_experiment_log/*
+new_imgs/*
+process_german_dataset.ipynb
