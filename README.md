@@ -13,7 +13,7 @@ It currently supports the following:
 
 ### classifiers:
 
-- Agarwal
+- Algorithm from _A Reductions Approach to Fair Classification_
 
 ### datasets:
 
@@ -31,17 +31,19 @@ Directly use demo.ipynb or run
 python3 run_experiment.py --eval_objective test_tau --dataset compas --rho-plus 0.2 --rho-minus 0.2 --frac 1 --criteria DP --classifier Agarwal --trials 3 --plot-result
 ```
 
+The details of parameters can be found in the definition of the _experiment_ function in _util.py_.
+
 ## Reference
 
 Code is modified on top of code in the following repos:
-
-files in fair_classification are modified from:
-
-<https://github.com/mbilalzafar/fair-classification>
 
 files in fairlearn are modified from:
 
 <https://github.com/Microsoft/fairlearn>
 
-files in fairERM are modified from:
+(not used in the paper) files in fair_classification are modified from:
+
+<https://github.com/mbilalzafar/fair-classification>
+
+(not used in the paper) files in fairERM are modified from:
 <https://github.com/jmikko/fair_ERM>
